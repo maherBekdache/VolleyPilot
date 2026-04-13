@@ -12,11 +12,13 @@
 </div>
 
 <div class="toolbar">
+    {% if not user.is_fan_role %}
     <div class="schedule-legend">
         <span class="schedule-legend-item"><span class="schedule-legend-dot" style="background:#ef4444;"></span> Home Game</span>
         <span class="schedule-legend-item"><span class="schedule-legend-dot" style="background:#f97316;"></span> Away Game</span>
         <span class="schedule-legend-item"><span class="schedule-legend-dot" style="background:#8b5cf6;"></span> Practice</span>
     </div>
+    {% endif %}
     <div style="display:flex;gap:8px;">
     {% if user.is_staff_role %}
     <a href="{% url 'match_create' %}" class="btn btn-primary" style="margin-right: 8px;">+ Add Match</a>
@@ -31,19 +33,22 @@
     {% for group in date_list %}
     <div class="schedule-section-header">{{ group.grouper|date:"l, F j, Y" }}</div>
     {% for event in group.list %}
+    {% if not user.is_fan_role or event.type == 'game' %}
     <div class="timeline-item{% if event.past %} past{% endif %}">
-        <div class="timeline-marker {% if event.type == 'practice' %}practice{% endif %}"></div>
-        <div class="timeline-content{% if event.type == 'practice' %} type-practice{% endif %}">
+        <div class="timeline-marker{% if not user.is_fan_role and event.type == 'practice' %} practice{% endif %}"></div>
+        <div class="timeline-content{% if not user.is_fan_role and event.type == 'practice' %} type-practice{% endif %}">
             <div class="timeline-date">
                 {{ event.time|time:"g:i A" }}
-                {% if event.type == 'game' %}
-                    {% if event.is_home %}
-                        <span class="badge badge-home" style="margin-left: 8px;">🏠 Home Game</span>
+                {% if not user.is_fan_role %}
+                    {% if event.type == 'game' %}
+                        {% if event.is_home %}
+                            <span class="badge badge-home" style="margin-left: 8px;">🏠 Home Game</span>
+                        {% else %}
+                            <span class="badge badge-away" style="margin-left: 8px;">✈️ Away Game</span>
+                        {% endif %}
                     {% else %}
-                        <span class="badge badge-away" style="margin-left: 8px;">✈️ Away Game</span>
+                        <span class="badge badge-practice" style="margin-left: 8px;">🏐 Practice</span>
                     {% endif %}
-                {% else %}
-                    <span class="badge badge-practice" style="margin-left: 8px;">🏐 Practice</span>
                 {% endif %}
                 {% if event.status == 'cancelled' %}
                     <span class="badge badge-danger" style="margin-left: 8px;">Cancelled</span>
@@ -89,6 +94,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
     {% endfor %}
     {% endfor %}
     {% if not events %}
