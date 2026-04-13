@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Game Results - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Game Results</h2>
+    <p>Review past game performance and match history.</p>
+</div>
+
+<!-- Season Record -->
+<div class="stats-grid" style="margin-bottom: 32px;">
+    <div class="stat-card">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-content">
+            <div class="stat-label">Wins</div>
+            <div class="stat-value">{{ wins }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-content">
+            <div class="stat-label">Losses</div>
+            <div class="stat-value">{{ losses }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">⭐</div>
+        <div class="stat-content">
+            <div class="stat-label">Win Rate</div>
+            <div class="stat-value">{{ win_rate }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">📈</div>
+        <div class="stat-content">
+            <div class="stat-label">Total Games</div>
+            <div class="stat-value">{{ total }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Tabs -->
+<div class="tabs" style="margin-bottom: 24px;">
+    <a href="{% url 'results' %}" class="tab {% if filter_type == 'all' %}active{% endif %}">All Games</a>
+    <a href="{% url 'results' %}?filter=win" class="tab {% if filter_type == 'win' %}active{% endif %}">Wins</a>
+    <a href="{% url 'results' %}?filter=loss" class="tab {% if filter_type == 'loss' %}active{% endif %}">Losses</a>
+</div>
+
+<!-- Results List -->
+<div>
+    {% for r in results_data %}
+    <div class="match-card">
+        <div class="match-header">
+            <div class="match-date">{{ r.match.date|date:"D, M j, Y" }}</div>
+            <div class="match-result {{ r.result }}">
+                {{ r.result|upper }}
+            </div>
+        </div>
+        <div class="match-teams">
+            <div class="team">
+                <div class="team-name-large">Our Team</div>
+                <div class="team-score-large">{{ r.our_sets }}</div>
+            </div>
+            <div class="vs">vs</div>
+            <div class="team">
+                <div class="team-name-large">{{ r.match.opponent }}</div>
+                <div class="team-score-large">{{ r.their_sets }}</div>
+            </div>
+        </div>
+        <div class="set-scores-detail">
+            <strong>Set Scores:</strong> {{ r.set_scores|join:", " }}
+        </div>
+    </div>
+    {% empty %}
+    <div class="card" style="text-align: center; padding: 40px;">
+        <p style="color: #64748b;">No completed matches yet.</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Cancel {{ event_type }} - VolleyPilot{% endblock %}
+{% block content %}
+<div style="max-width: 500px; margin: 40px auto; text-align: center;">
+    <div class="card">
+        <h2>Cancel {{ event_type }}?</h2>
+        <p style="margin: 16px 0; color: #64748b;">
+            Are you sure you want to cancel this {{ event_type|lower }}?
+            {% if event_type == 'Match' %}
+                <br><strong>{{ event.get_display_name|default:event.opponent }}</strong> on {{ event.date|date:"F j, Y" }}
+            {% endif %}
+        </p>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" style="background: #dc2626;">Yes, Cancel It</button>
+            <a href="{% url 'schedule' %}" class="btn btn-secondary" style="margin-left: 8px;">Go Back</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

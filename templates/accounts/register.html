@@ -1,0 +1,75 @@
+{% extends "accounts/auth_base.html" %}
+{% block title %}Register - VolleyPilot{% endblock %}
+{% block auth_content %}
+<h2 style="font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #1e293b;">Create Account</h2>
+<form method="post">
+    {% csrf_token %}
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+            <label for="id_first_name">First Name</label>
+            <input type="text" name="first_name" id="id_first_name" value="{{ form.first_name.value|default:'' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="id_last_name">Last Name</label>
+            <input type="text" name="last_name" id="id_last_name" value="{{ form.last_name.value|default:'' }}" required>
+        </div>
+    </div>
+    <div class="form-group">
+        <label for="id_email">Email</label>
+        <input type="email" name="email" id="id_email" value="{{ form.email.value|default:'' }}" required>
+    </div>
+    <div class="form-group">
+        <label for="id_role">Role</label>
+        <select name="role" id="id_role" style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;">
+            {% for value, label in form.fields.role.choices %}
+            <option value="{{ value }}" {% if form.role.value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group" id="team-group" style="display:none;">
+        <label for="id_team">Team</label>
+        <select name="team" id="id_team" style="width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;">
+            <option value="">— Select a team —</option>
+            {% for team in form.fields.team.queryset %}
+            <option value="{{ team.pk }}" {% if form.team.value|stringformat:"s" == team.pk|stringformat:"s" %}selected{% endif %}>{{ team.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="id_password1">Password</label>
+        <input type="password" name="password1" id="id_password1" required>
+    </div>
+    <div class="form-group">
+        <label for="id_password2">Confirm Password</label>
+        <input type="password" name="password2" id="id_password2" required>
+    </div>
+    {% if form.errors %}
+    <div style="color: #991b1b; font-size: 13px; margin-bottom: 16px;">
+        {% for field in form %}
+            {% for error in field.errors %}
+                <div>{{ error }}</div>
+            {% endfor %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}
+            <div>{{ error }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Create Account</button>
+</form>
+<div style="text-align: center; margin-top: 20px; font-size: 14px; color: #64748b;">
+    Already have an account? <a href="{% url 'login' %}" style="color: #3b82f6; text-decoration: none;">Sign In</a>
+</div>
+<script>
+(function() {
+    const TEAM_ROLES = ['coach', 'assistant', 'manager', 'player', 'parent', 'director'];
+    const roleSelect = document.getElementById('id_role');
+    const teamGroup = document.getElementById('team-group');
+    function toggle() {
+        teamGroup.style.display = TEAM_ROLES.includes(roleSelect.value) ? '' : 'none';
+    }
+    roleSelect.addEventListener('change', toggle);
+    toggle();
+})();
+</script>
+{% endblock %}

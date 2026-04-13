@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Team Invitation - VolleyPilot{% endblock %}
+{% block content %}
+<div style="max-width: 500px; margin: 80px auto; text-align: center;">
+    <div class="card">
+        {% if invitation %}
+            <h2>You're Invited!</h2>
+            <p style="margin: 16px 0;">You've been invited to join <strong>{{ invitation.team.name }}</strong> as <strong>{{ invitation.get_role_display }}</strong>.</p>
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" name="action" value="accept" class="btn btn-primary">Accept</button>
+                <button type="submit" name="action" value="decline" class="btn btn-secondary" style="margin-left: 8px;">Decline</button>
+            </form>
+        {% else %}
+            <h2>Invalid Invitation</h2>
+            <p style="margin: 16px 0;">This invitation link is no longer valid or has already been used.</p>
+            <a href="{% url 'dashboard' %}" class="btn btn-primary">Go to Dashboard</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

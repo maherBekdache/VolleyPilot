@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Availability - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Availability Summary</h2>
+    <p>{{ event_type|title }} on {{ event.date|date:"F j, Y" }}</p>
+</div>
+
+<!-- Summary Cards -->
+<div class="stats-grid" style="margin-bottom: 32px;">
+    <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-content">
+            <div class="stat-label">Available</div>
+            <div class="stat-value">{{ summary.available }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">❌</div>
+        <div class="stat-content">
+            <div class="stat-label">Unavailable</div>
+            <div class="stat-value">{{ summary.unavailable }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">❓</div>
+        <div class="stat-content">
+            <div class="stat-label">Maybe</div>
+            <div class="stat-value">{{ summary.maybe }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-content">
+            <div class="stat-label">Pending</div>
+            <div class="stat-value">{{ summary.pending }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Response Table -->
+<div class="card stats-table-container">
+    <h3>Player Responses</h3>
+    <table class="stats-table">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Position</th>
+                <th>#</th>
+                <th>Status</th>
+                <th>Responded</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for resp in responses %}
+            <tr>
+                <td><strong>{{ resp.player.name }}</strong></td>
+                <td>{{ resp.player.get_position_display }}</td>
+                <td>{{ resp.player.jersey_number }}</td>
+                <td>
+                    {% if resp.status == 'available' %}
+                        <span class="badge badge-primary" style="background: #dcfce7; color: #16a34a;">Available</span>
+                    {% elif resp.status == 'unavailable' %}
+                        <span class="badge badge-warning" style="background: #fef2f2; color: #dc2626;">Unavailable</span>
+                    {% elif resp.status == 'maybe' %}
+                        <span class="badge badge-warning">Maybe</span>
+                    {% else %}
+                        <span class="badge badge-primary" style="background: #f1f5f9; color: #64748b;">Pending</span>
+                    {% endif %}
+                </td>
+                <td>{{ resp.responded_at|date:"M j, g:i A"|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<a href="{% url 'schedule' %}" class="btn btn-secondary" style="margin-top: 16px;">Back to Schedule</a>
+{% endblock %}

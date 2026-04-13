@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Welcome to VolleyPilot</h2>
+    <p>Browse games, stats, and rosters across all teams.</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon">🏐</div>
+        <div class="stat-content">
+            <div class="stat-label">Teams</div>
+            <div class="stat-value">{{ all_teams|length }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">📅</div>
+        <div class="stat-content">
+            <div class="stat-label">Upcoming Games</div>
+            <div class="stat-value">{{ upcoming_matches|length }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="dashboard-grid">
+    <div class="card">
+        <h3>Upcoming Games</h3>
+        <div class="games-list">
+            {% for m in upcoming_matches %}
+            <div class="game-item">
+                <div class="game-date">
+                    <div class="date-day">{{ m.date.day }}</div>
+                    <div class="date-month">{{ m.date|date:"M"|upper }}</div>
+                </div>
+                <div class="game-details">
+                    <div class="game-opponent">{{ m.team.name }} {% if m.is_home %}vs{% else %}@{% endif %} {{ m.opponent }}</div>
+                    <div class="game-time">{{ m.time|time:"g:i A" }} - {{ m.location }}</div>
+                </div>
+            </div>
+            {% empty %}
+            <div style="color: #64748b; text-align: center; padding: 20px;">No upcoming games</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Browse Teams</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+            {% for t in all_teams %}
+            <a href="{% url 'roster' %}?team={{ t.pk }}" style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:8px;background:#f8fafc;text-decoration:none;color:#1e293b;transition:background .15s;">
+                <span style="font-size:24px;">🏐</span>
+                <div>
+                    <div style="font-weight:600;">{{ t.name }}</div>
+                    <div style="font-size:13px;color:#64748b;">{{ t.players.count }} players</div>
+                </div>
+            </a>
+            {% empty %}
+            <div style="color: #64748b; text-align: center; padding: 20px;">No teams yet</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div style="display:flex;gap:12px;margin-top:24px;">
+    <a href="{% url 'statistics' %}" class="btn btn-primary">View League Statistics</a>
+    <a href="{% url 'results' %}" class="btn btn-secondary">View Game Results</a>
+    <a href="{% url 'schedule' %}" class="btn btn-secondary">View Schedule</a>
+</div>
+{% endblock %}

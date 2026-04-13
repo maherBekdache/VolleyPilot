@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ event_type }} - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>{% if form.instance.pk %}Edit{% else %}New{% endif %} {{ event_type }}</h2>
+    <p>{% if form.instance.pk %}Update {{ event_type|lower }} details.{% else %}Add a new {{ event_type|lower }} to the schedule.{% endif %}</p>
+</div>
+<div class="card" style="max-width: 600px;">
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+        <div class="form-group">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+                {% for error in field.errors %}
+                <span style="color: #dc2626; font-size: 13px;">{{ error }}</span>
+                {% endfor %}
+            {% endif %}
+        </div>
+        {% endfor %}
+        <div style="display: flex; gap: 8px; margin-top: 16px;">
+            <button type="submit" class="btn btn-primary">{% if form.instance.pk %}Save Changes{% else %}Create {{ event_type }}{% endif %}</button>
+            <a href="{% url 'schedule' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

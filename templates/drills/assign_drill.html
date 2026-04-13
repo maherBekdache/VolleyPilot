@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Assign Drill - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Assign Drill to Practice</h2>
+    <p>{{ practice.focus }} &mdash; {{ practice.date|date:"F j, Y" }}</p>
+</div>
+
+<div class="player-grid">
+    {% for drill in drills %}
+    <div class="drill-card">
+        <div class="drill-header">
+            <h4 class="drill-title">{{ drill.name }}</h4>
+            <span class="drill-category">{{ drill.get_category_display }}</span>
+        </div>
+        <div class="drill-meta">
+            <span>⏱️ {{ drill.duration }} min</span>
+            <span>👥 {{ drill.players_needed }} players</span>
+        </div>
+        <p class="drill-description">{{ drill.description|truncatewords:20 }}</p>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="drill-difficulty difficulty-{{ drill.difficulty }}">{{ drill.get_difficulty_display }}</span>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="drill_id" value="{{ drill.pk }}">
+                <button type="submit" class="btn btn-primary" style="font-size: 13px; padding: 4px 12px;">+ Add</button>
+            </form>
+        </div>
+    </div>
+    {% empty %}
+    <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+        <p style="color: #64748b;">No drills in the library yet. <a href="{% url 'drill_create' %}">Create one first.</a></p>
+    </div>
+    {% endfor %}
+</div>
+
+<a href="{% url 'practice_detail' practice.id %}" class="btn btn-secondary" style="margin-top: 16px;">Back to Practice</a>
+{% endblock %}

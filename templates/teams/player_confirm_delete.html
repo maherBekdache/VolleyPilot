@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Remove Player - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Remove Player</h2>
+</div>
+<div class="card" style="max-width: 500px;">
+    <p style="margin-bottom: 24px;">Are you sure you want to remove <strong>{{ player.name }} (#{{ player.jersey_number }})</strong> from the roster?</p>
+    <form method="post">
+        {% csrf_token %}
+        <div style="display: flex; gap: 12px;">
+            <button type="submit" class="btn btn-danger">Yes, Remove</button>
+            <a href="{% url 'roster' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

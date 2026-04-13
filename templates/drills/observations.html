@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Drill Observations - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Post-Practice Observations</h2>
+    <p>{{ practice.focus }} &mdash; {{ practice.date|date:"F j, Y" }}</p>
+</div>
+
+<form method="post">
+    {% csrf_token %}
+    {% for pd in practice_drills %}
+    <div class="card" style="margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3>{{ pd.order }}. {{ pd.drill.name }}</h3>
+            <span class="drill-category">{{ pd.drill.get_category_display }}</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="performed_{{ pd.id }}"
+                        {% if pd.observation and pd.observation.was_performed %}checked{% endif %}>
+                    Was performed
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="duration_{{ pd.id }}">Actual Duration (min)</label>
+                <input type="number" name="duration_{{ pd.id }}" id="duration_{{ pd.id }}"
+                       value="{% if pd.observation %}{{ pd.observation.actual_duration|default_if_none:'' }}{% endif %}"
+                       min="0" style="width: 100%;">
+            </div>
+            <div class="form-group">
+                <label for="rating_{{ pd.id }}">Rating (1-5)</label>
+                <select name="rating_{{ pd.id }}" id="rating_{{ pd.id }}">
+                    <option value="">—</option>
+                    {% for val in "12345" %}
+                    <option value="{{ val }}"
+                        {% if pd.observation and pd.observation.rating|stringformat:"s" == val %}selected{% endif %}>
+                        {{ val }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="notes_{{ pd.id }}">Notes</label>
+                <textarea name="notes_{{ pd.id }}" id="notes_{{ pd.id }}" rows="2"
+                    style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 8px;">{% if pd.observation %}{{ pd.observation.notes|default_if_none:'' }}{% endif %}</textarea>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    <div style="display: flex; gap: 8px;">
+        <button type="submit" class="btn btn-primary">Save Observations</button>
+        <a href="{% url 'practice_detail' practice.id %}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}

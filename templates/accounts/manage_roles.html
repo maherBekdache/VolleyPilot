@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Manage Roles - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Manage User Roles</h2>
+    <p>Assign roles to team members.</p>
+</div>
+<div class="card">
+    <table class="stats-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Current Role</th>
+                <th>Change Role</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td><strong>{{ u.get_full_name|default:u.email }}</strong></td>
+                <td>{{ u.email }}</td>
+                <td><span class="badge badge-primary">{{ u.get_role_display }}</span></td>
+                <td>
+                    <form method="post" style="display: flex; gap: 8px; align-items: center;">
+                        {% csrf_token %}
+                        <input type="hidden" name="user_id" value="{{ u.pk }}">
+                        <select name="role" style="width: auto; min-width: 150px;">
+                            <option value="coach" {% if u.role == 'coach' %}selected{% endif %}>Coach</option>
+                            <option value="assistant" {% if u.role == 'assistant' %}selected{% endif %}>Assistant Coach</option>
+                            <option value="manager" {% if u.role == 'manager' %}selected{% endif %}>Manager</option>
+                            <option value="player" {% if u.role == 'player' %}selected{% endif %}>Player</option>
+                            <option value="parent" {% if u.role == 'parent' %}selected{% endif %}>Parent</option>
+                            <option value="director" {% if u.role == 'director' %}selected{% endif %}>Club Director</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary" style="padding: 8px 16px;">Update</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" style="text-align: center; color: #64748b;">No other users registered yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} Player - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>{{ action }} Player</h2>
+    <p>{% if action == 'Add' %}Add a new player to your roster.{% else %}Update player information.{% endif %}</p>
+</div>
+<div class="card" style="max-width: 600px;">
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="id_name">Full Name</label>
+            <input type="text" name="name" id="id_name" value="{{ form.name.value|default:'' }}" required>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+                <label for="id_jersey_number">Jersey Number</label>
+                <input type="number" name="jersey_number" id="id_jersey_number" value="{{ form.jersey_number.value|default:'' }}" required min="0" max="99">
+            </div>
+            <div class="form-group">
+                <label for="id_position">Position</label>
+                <select name="position" id="id_position" required>
+                    <option value="">Select position</option>
+                    <option value="Setter" {% if form.position.value == 'Setter' %}selected{% endif %}>Setter</option>
+                    <option value="Outside Hitter" {% if form.position.value == 'Outside Hitter' %}selected{% endif %}>Outside Hitter</option>
+                    <option value="Middle Blocker" {% if form.position.value == 'Middle Blocker' %}selected{% endif %}>Middle Blocker</option>
+                    <option value="Opposite" {% if form.position.value == 'Opposite' %}selected{% endif %}>Opposite</option>
+                    <option value="Libero" {% if form.position.value == 'Libero' %}selected{% endif %}>Libero</option>
+                    <option value="Defensive Specialist" {% if form.position.value == 'Defensive Specialist' %}selected{% endif %}>Defensive Specialist</option>
+                </select>
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+                <label for="id_height">Height</label>
+                <input type="text" name="height" id="id_height" value="{{ form.height.value|default:'' }}" placeholder="e.g. 5'11&quot;">
+            </div>
+            <div class="form-group">
+                <label for="id_year">Year</label>
+                <select name="year" id="id_year">
+                    <option value="">Select year</option>
+                    <option value="Freshman" {% if form.year.value == 'Freshman' %}selected{% endif %}>Freshman</option>
+                    <option value="Sophomore" {% if form.year.value == 'Sophomore' %}selected{% endif %}>Sophomore</option>
+                    <option value="Junior" {% if form.year.value == 'Junior' %}selected{% endif %}>Junior</option>
+                    <option value="Senior" {% if form.year.value == 'Senior' %}selected{% endif %}>Senior</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="id_notes">Notes</label>
+            <textarea name="notes" id="id_notes" rows="3">{{ form.notes.value|default:'' }}</textarea>
+        </div>
+        {% if form.errors %}
+        <div style="color: #991b1b; font-size: 13px; margin-bottom: 16px;">
+            {% for field in form %}{% for error in field.errors %}<div>{{ error }}</div>{% endfor %}{% endfor %}
+        </div>
+        {% endif %}
+        <div style="display: flex; gap: 12px;">
+            <button type="submit" class="btn btn-primary">{{ action }} Player</button>
+            <a href="{% url 'roster' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

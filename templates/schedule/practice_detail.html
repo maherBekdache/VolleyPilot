@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Practice Detail - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Practice: {{ practice.focus }}</h2>
+    <p>{{ practice.date|date:"l, F j, Y" }} at {{ practice.time|time:"g:i A" }} &mdash; {{ practice.location }}</p>
+</div>
+
+<div class="card" style="margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3>Assigned Drills</h3>
+        {% if user.is_staff_role %}
+        <a href="{% url 'assign_drill' practice.id %}" class="btn btn-primary" style="font-size: 13px;">+ Add Drill</a>
+        {% endif %}
+    </div>
+    {% if practice_drills %}
+    <table class="stats-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Drill</th>
+                <th>Category</th>
+                <th>Duration</th>
+                <th>Difficulty</th>
+                {% if user.is_staff_role %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for pd in practice_drills %}
+            <tr>
+                <td>{{ pd.order }}</td>
+                <td><strong>{{ pd.drill.name }}</strong></td>
+                <td>{{ pd.drill.get_category_display }}</td>
+                <td>{{ pd.planned_duration }} min</td>
+                <td>
+                    <span class="drill-difficulty difficulty-{{ pd.drill.difficulty }}">
+                        {{ pd.drill.get_difficulty_display }}
+                    </span>
+                </td>
+                {% if user.is_staff_role %}
+                <td>
+                    <form method="post" action="{% url 'remove_drill_from_practice' pd.id %}" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-secondary" style="font-size: 12px; padding: 2px 8px;">Remove</button>
+                    </form>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #64748b; text-align: center; padding: 20px;">No drills assigned yet.</p>
+    {% endif %}
+</div>
+
+{% if user.is_staff_role and practice_drills %}
+<div style="display: flex; gap: 8px;">
+    <a href="{% url 'drill_observations' practice.id %}" class="btn btn-primary">Record Observations</a>
+    <a href="{% url 'schedule' %}" class="btn btn-secondary">Back to Schedule</a>
+</div>
+{% else %}
+<a href="{% url 'schedule' %}" class="btn btn-secondary">Back to Schedule</a>
+{% endif %}
+{% endblock %}

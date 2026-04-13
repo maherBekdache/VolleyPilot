@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Invite - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Invite Staff to {{ team.name }}</h2>
+    <p>Send an email invitation to join the team.</p>
+</div>
+<div class="card" style="max-width: 500px;">
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="id_email">Email Address</label>
+            <input type="email" name="email" id="id_email" required>
+        </div>
+        <div class="form-group">
+            <label for="id_role">Role</label>
+            <select name="role" id="id_role">
+                <option value="assistant">Assistant Coach</option>
+                <option value="manager">Manager</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Send Invitation</button>
+        <a href="{% url 'roster' %}" class="btn btn-secondary" style="margin-left: 8px;">Cancel</a>
+    </form>
+</div>
+{% endblock %}

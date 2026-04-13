@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}No Team - VolleyPilot{% endblock %}
+{% block content %}
+<div style="max-width: 500px; margin: 60px auto; text-align: center;">
+    <div class="card" style="padding: 40px;">
+        <div style="font-size: 48px; margin-bottom: 16px;">🏐</div>
+        <h2 style="margin-bottom: 12px;">No Team Yet</h2>
+        {% if user.is_staff_role %}
+            <p style="color: #64748b; margin-bottom: 24px;">Create a team to get started managing your roster, schedule, and stats.</p>
+            <a href="{% url 'team_create' %}" class="btn btn-primary">Create a Team</a>
+        {% else %}
+            <p style="color: #64748b; margin-bottom: 24px;">You haven't been added to a team yet. Ask your coach to add you to the roster or send you an invitation.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

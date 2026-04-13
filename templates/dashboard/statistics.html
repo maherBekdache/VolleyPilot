@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block title %}{% if single_player %}{{ single_player.name }} Stats{% else %}Statistics{% endif %} - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    {% if single_player %}
+    <h2>Player Statistics: #{{ single_player.jersey_number }} {{ single_player.name }}</h2>
+    <p>{{ single_player.get_position_display }} — {{ single_player.team.name }}</p>
+    {% else %}
+    <h2>Statistics</h2>
+    <p>Team and individual player performance metrics.</p>
+    {% endif %}
+</div>
+
+{% if single_player %}
+<!-- Back link -->
+<a href="{% url 'roster' %}" class="btn btn-secondary" style="margin-bottom: 24px;">← Back to Roster</a>
+<a href="{% url 'statistics' %}" class="btn btn-secondary" style="margin-bottom: 24px;">View All Stats</a>
+{% else %}
+<!-- Filter Toolbar -->
+<div class="toolbar" style="margin-bottom: 24px;">
+    <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search players..." value="{{ search }}"
+               onkeyup="if(event.key==='Enter')applyStatsFilters()">
+    </div>
+    <div class="filter-group">
+        <div class="tabs" style="margin: 0;">
+            <button class="tab {% if scope == 'team' %}active{% endif %}" onclick="setScope('team')">My Team</button>
+            <button class="tab {% if scope == 'league' %}active{% endif %}" onclick="setScope('league')">League-Wide</button>
+        </div>
+        <select id="teamFilter" onchange="applyStatsFilters()" style="{% if scope != 'league' %}display:none{% endif %}">
+            <option value="">All Teams</option>
+            {% for t in all_teams %}
+            <option value="{{ t.pk }}" {% if team_id|stringformat:"s" == t.pk|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<script>
+function setScope(s) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('scope', s);
+    if (s === 'team') params.delete('team');
+    window.location.href = '{% url "statistics" %}?' + params.toString();
+}
+function applyStatsFilters() {
+    const params = new URLSearchParams(window.location.search);
+    const search = document.getElementById('searchInput').value;
+    const teamSel = document.getElementById('teamFilter');
+    if (search) params.set('search', search); else params.delete('search');
+    if (teamSel && teamSel.value) params.set('team', teamSel.value); else params.delete('team');
+    window.location.href = '{% url "statistics" %}?' + params.toString();
+}
+</script>
+{% endif %}
+
+<!-- Team Stats Overview -->
+<div class="stats-grid" style="margin-bottom: 32px;">
+    <div class="stat-card">
+        <div class="stat-icon">🏐</div>
+        <div class="stat-content">
+            <div class="stat-label">Total Kills</div>
+            <div class="stat-value">{{ total_kills }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">🛡️</div>
+        <div class="stat-content">
+            <div class="stat-label">Total Blocks</div>
+            <div class="stat-value">{{ total_blocks }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">⚡</div>
+        <div class="stat-content">
+            <div class="stat-label">Total Aces</div>
+            <div class="stat-value">{{ total_aces }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">🎯</div>
+        <div class="stat-content">
+            <div class="stat-label">Total Digs</div>
+            <div class="stat-value">{{ total_digs }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Player Stats Table -->
+<div class="card stats-table-container" style="margin-bottom: 32px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3>Player Statistics</h3>
+        {% if user.is_staff_role %}
+        <a href="{% url 'export_stats_csv' %}" class="btn btn-secondary" style="font-size: 13px;">📥 Export CSV</a>
+        {% endif %}
+    </div>
+    <table class="stats-table">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Position</th>
+                <th>Kills</th>
+                <th>Blocks</th>
+                <th>Aces</th>
+                <th>Digs</th>
+                <th>Assists</th>
+                <th>Errors</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in player_stats %}
+            <tr>
+                <td>
+                    <strong>{{ s.player.name }}</strong><br>
+                    <span style="font-size: 12px; color: #64748b;">#{{ s.player.jersey_number }}</span>
+                </td>
+                <td>{{ s.player.get_position_display }}</td>
+                <td><strong>{{ s.kills }}</strong></td>
+                <td><strong>{{ s.blocks }}</strong></td>
+                <td><strong>{{ s.aces }}</strong></td>
+                <td><strong>{{ s.digs }}</strong></td>
+                <td><strong>{{ s.assists }}</strong></td>
+                <td><strong>{{ s.errors }}</strong></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" style="text-align: center; color: #64748b;">No stats data yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Top Performers by Category -->
+<div style="margin-top: 32px;">
+    <h3 style="margin-bottom: 24px; font-size: 24px; font-weight: 700; color: #1e293b;">Top Performers</h3>
+    <div class="dashboard-grid">
+        <div class="card">
+            <h3>🏐 Most Kills</h3>
+            <div class="performers-list">
+                {% for s in top_kills %}
+                <div class="performer-item">
+                    <div class="performer-rank">{{ forloop.counter }}</div>
+                    <div class="performer-info">
+                        <div class="performer-name">{{ s.player.name }}</div>
+                        <div class="performer-stat">{{ s.kills }} kills</div>
+                    </div>
+                </div>
+                {% empty %}
+                <p style="color: #64748b; font-size: 14px;">No data</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card">
+            <h3>🛡️ Most Blocks</h3>
+            <div class="performers-list">
+                {% for s in top_blocks %}
+                <div class="performer-item">
+                    <div class="performer-rank">{{ forloop.counter }}</div>
+                    <div class="performer-info">
+                        <div class="performer-name">{{ s.player.name }}</div>
+                        <div class="performer-stat">{{ s.blocks }} blocks</div>
+                    </div>
+                </div>
+                {% empty %}
+                <p style="color: #64748b; font-size: 14px;">No data</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card">
+            <h3>⚡ Most Aces</h3>
+            <div class="performers-list">
+                {% for s in top_aces %}
+                <div class="performer-item">
+                    <div class="performer-rank">{{ forloop.counter }}</div>
+                    <div class="performer-info">
+                        <div class="performer-name">{{ s.player.name }}</div>
+                        <div class="performer-stat">{{ s.aces }} aces</div>
+                    </div>
+                </div>
+                {% empty %}
+                <p style="color: #64748b; font-size: 14px;">No data</p>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card">
+            <h3>🎯 Most Digs</h3>
+            <div class="performers-list">
+                {% for s in top_digs %}
+                <div class="performer-item">
+                    <div class="performer-rank">{{ forloop.counter }}</div>
+                    <div class="performer-info">
+                        <div class="performer-name">{{ s.player.name }}</div>
+                        <div class="performer-stat">{{ s.digs }} digs</div>
+                    </div>
+                </div>
+                {% empty %}
+                <p style="color: #64748b; font-size: 14px;">No data</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rotation Comparison -->
+<div style="margin-top: 32px;">
+    <h3 style="margin-bottom: 24px; font-size: 24px; font-weight: 700; color: #1e293b;">Rotation Performance</h3>
+    <div class="card stats-table-container">
+        <table class="stats-table">
+            <thead>
+                <tr>
+                    <th>Rotation</th>
+                    <th>Points Won</th>
+                    <th>Points Lost</th>
+                    <th>Net</th>
+                    <th>Win %</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rotation_stats %}
+                <tr>
+                    <td><strong>Rotation {{ r.rotation }}</strong></td>
+                    <td style="color: #16a34a;">{{ r.won }}</td>
+                    <td style="color: #dc2626;">{{ r.lost }}</td>
+                    <td>
+                        <strong style="color: {% if r.net > 0 %}#16a34a{% elif r.net < 0 %}#dc2626{% else %}#64748b{% endif %};">
+                            {% if r.net > 0 %}+{% endif %}{{ r.net }}
+                        </strong>
+                    </td>
+                    <td>{{ r.sideout_pct }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

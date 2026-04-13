@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Practice Drills - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Practice Drills</h2>
+    <p>Browse and organize your drill library.</p>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+    <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search drills..." value="{{ search }}"
+               onkeyup="if(event.key==='Enter')applyFilters()">
+    </div>
+    <div class="filter-group">
+        <select id="categoryFilter" onchange="applyFilters()">
+            <option value="all" {% if category == 'all' %}selected{% endif %}>All Categories</option>
+            <option value="Passing" {% if category == 'Passing' %}selected{% endif %}>Passing</option>
+            <option value="Serving" {% if category == 'Serving' %}selected{% endif %}>Serving</option>
+            <option value="Hitting" {% if category == 'Hitting' %}selected{% endif %}>Hitting</option>
+            <option value="Blocking" {% if category == 'Blocking' %}selected{% endif %}>Blocking</option>
+            <option value="Defense" {% if category == 'Defense' %}selected{% endif %}>Defense</option>
+            <option value="Setting" {% if category == 'Setting' %}selected{% endif %}>Setting</option>
+            <option value="Game-like" {% if category == 'Game-like' %}selected{% endif %}>Game-like</option>
+        </select>
+        <select id="difficultyFilter" onchange="applyFilters()">
+            <option value="all" {% if difficulty == 'all' %}selected{% endif %}>All Levels</option>
+            <option value="beginner" {% if difficulty == 'beginner' %}selected{% endif %}>Beginner</option>
+            <option value="intermediate" {% if difficulty == 'intermediate' %}selected{% endif %}>Intermediate</option>
+            <option value="advanced" {% if difficulty == 'advanced' %}selected{% endif %}>Advanced</option>
+        </select>
+        {% if user.is_staff_role %}
+        <a href="{% url 'drill_create' %}" class="btn btn-primary">+ Add Drill</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Drills Grid -->
+<div class="player-grid">
+    {% for drill in drills %}
+    <div class="drill-card">
+        <div class="drill-header">
+            <h4 class="drill-title">{{ drill.name }}</h4>
+            <span class="drill-category">{{ drill.get_category_display }}</span>
+        </div>
+        <div class="drill-meta">
+            <span>⏱️ {{ drill.duration }} min</span>
+            <span>👥 {{ drill.players_needed }} players</span>
+        </div>
+        <p class="drill-description">{{ drill.description }}</p>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="drill-difficulty difficulty-{{ drill.difficulty }}">
+                {{ drill.get_difficulty_display }}
+            </span>
+            {% if user.is_staff_role %}
+            <a href="{% url 'drill_edit' drill.pk %}" class="btn btn-secondary" style="font-size: 12px; padding: 2px 10px;">Edit</a>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+        <p style="color: #64748b;">No drills found matching your criteria.</p>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+function applyFilters() {
+    const search = document.getElementById('searchInput').value;
+    const category = document.getElementById('categoryFilter').value;
+    const difficulty = document.getElementById('difficultyFilter').value;
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (category !== 'all') params.set('category', category);
+    if (difficulty !== 'all') params.set('difficulty', difficulty);
+    window.location.href = '{% url "drill_list" %}?' + params.toString();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{% if is_fan %}Rosters{% else %}Team Roster{% endif %} - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>{% if is_fan %}League Rosters{% else %}Team Roster{% endif %}</h2>
+    <p>{% if is_fan %}Browse player rosters across all teams.{% else %}Manage your team players and their information.{% endif %}</p>
+</div>
+
+{% if is_fan and all_teams %}
+<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+    <a href="{% url 'roster' %}" class="btn {% if not selected_team %}btn-primary{% else %}btn-secondary{% endif %}">All Teams</a>
+    {% for t in all_teams %}
+    <a href="{% url 'roster' %}?team={{ t.pk }}" class="btn {% if selected_team == t.pk|stringformat:'d' %}btn-primary{% else %}btn-secondary{% endif %}">{{ t.name }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Toolbar -->
+<div class="toolbar">
+    <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <form method="get" style="display: contents;">
+            <input type="text" name="search" placeholder="Search players..." value="{{ search }}" style="padding-left: 36px;">
+            <input type="hidden" name="position" value="{{ position }}">
+        </form>
+    </div>
+    <div class="filter-group">
+        <form method="get" id="filterForm">
+            <input type="hidden" name="search" value="{{ search }}">
+            <select name="position" onchange="this.form.submit()">
+                <option value="all" {% if position == 'all' %}selected{% endif %}>All Positions</option>
+                <option value="Setter" {% if position == 'Setter' %}selected{% endif %}>Setter</option>
+                <option value="Outside Hitter" {% if position == 'Outside Hitter' %}selected{% endif %}>Outside Hitter</option>
+                <option value="Middle Blocker" {% if position == 'Middle Blocker' %}selected{% endif %}>Middle Blocker</option>
+                <option value="Opposite" {% if position == 'Opposite' %}selected{% endif %}>Opposite</option>
+                <option value="Libero" {% if position == 'Libero' %}selected{% endif %}>Libero</option>
+            </select>
+        </form>
+        {% if user.is_staff_role %}
+        <a href="{% url 'player_add' %}" class="btn btn-primary">+ Add Player</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Player Grid -->
+<div class="player-grid">
+    {% for player in players %}
+    <div class="player-card">
+        <a href="{% url 'statistics' %}?player={{ player.pk }}" style="text-decoration: none; color: inherit; display: block; cursor: pointer;">
+            <div class="player-header">
+                <div class="player-avatar">{{ player.jersey_number }}</div>
+                <div class="player-info">
+                    <h4>{{ player.name }}</h4>
+                    <div class="player-position">{{ player.position }}</div>
+                </div>
+            </div>
+            <div class="player-stats">
+                <div class="stat-item">
+                    <div class="stat-item-label">Height</div>
+                    <div class="stat-item-value">{{ player.height|default:"-" }}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-item-label">Year</div>
+                    <div class="stat-item-value">{{ player.year|default:"-" }}</div>
+                </div>
+            </div>
+            {% if player.notes %}
+            <div style="font-size: 13px; color: #64748b; margin-bottom: 12px;">{{ player.notes|truncatechars:80 }}</div>
+            {% endif %}
+        </a>
+        {% if user.is_staff_role %}
+        <div style="display: flex; gap: 8px;">
+            <a href="{% url 'player_edit' player.pk %}" class="btn btn-secondary" style="flex: 1; text-align: center; padding: 8px;">Edit</a>
+            <a href="{% url 'player_delete' player.pk %}" class="btn btn-danger" style="padding: 8px 16px;">Remove</a>
+        </div>
+        {% endif %}
+    </div>
+    {% empty %}
+    <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #64748b;">
+        <p style="font-size: 18px; margin-bottom: 12px;">No players on the roster yet.</p>
+        {% if user.is_staff_role %}
+        <a href="{% url 'player_add' %}" class="btn btn-primary">+ Add First Player</a>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+{% if user.is_coach %}
+<div style="margin-top: 24px;">
+    <a href="{% url 'invite' %}" class="btn btn-secondary">📧 Invite Staff Members</a>
+    <a href="{% url 'manage_roles' %}" class="btn btn-secondary">👤 Manage Roles</a>
+</div>
+{% endif %}
+{% endblock %}

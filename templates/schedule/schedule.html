@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Schedule - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Schedule</h2>
+    <p>Upcoming games and practice sessions.</p>
+</div>
+
+<div style="display:flex;gap:8px;margin-bottom:20px;">
+    <a href="{% url 'schedule' %}" class="btn {% if tab == 'upcoming' %}btn-primary{% else %}btn-secondary{% endif %}">Upcoming</a>
+    <a href="{% url 'schedule' %}?tab=completed" class="btn {% if tab == 'completed' %}btn-primary{% else %}btn-secondary{% endif %}">Completed</a>
+</div>
+
+<div class="toolbar">
+    <div class="schedule-legend">
+        <span class="schedule-legend-item"><span class="schedule-legend-dot" style="background:#ef4444;"></span> Home Game</span>
+        <span class="schedule-legend-item"><span class="schedule-legend-dot" style="background:#f97316;"></span> Away Game</span>
+        <span class="schedule-legend-item"><span class="schedule-legend-dot" style="background:#8b5cf6;"></span> Practice</span>
+    </div>
+    <div style="display:flex;gap:8px;">
+    {% if user.is_staff_role %}
+    <a href="{% url 'match_create' %}" class="btn btn-primary" style="margin-right: 8px;">+ Add Match</a>
+    <a href="{% url 'practice_create' %}" class="btn btn-primary">+ Add Practice</a>
+    {% endif %}
+    </div>
+</div>
+
+<!-- Timeline -->
+<div class="timeline">
+    {% regroup events by date as date_list %}
+    {% for group in date_list %}
+    <div class="schedule-section-header">{{ group.grouper|date:"l, F j, Y" }}</div>
+    {% for event in group.list %}
+    <div class="timeline-item{% if event.past %} past{% endif %}">
+        <div class="timeline-marker {% if event.type == 'practice' %}practice{% endif %}"></div>
+        <div class="timeline-content{% if event.type == 'practice' %} type-practice{% endif %}">
+            <div class="timeline-date">
+                {{ event.time|time:"g:i A" }}
+                {% if event.type == 'game' %}
+                    {% if event.is_home %}
+                        <span class="badge badge-home" style="margin-left: 8px;">🏠 Home Game</span>
+                    {% else %}
+                        <span class="badge badge-away" style="margin-left: 8px;">✈️ Away Game</span>
+                    {% endif %}
+                {% else %}
+                    <span class="badge badge-practice" style="margin-left: 8px;">🏐 Practice</span>
+                {% endif %}
+                {% if event.status == 'cancelled' %}
+                    <span class="badge badge-danger" style="margin-left: 8px;">Cancelled</span>
+                {% endif %}
+                {% if event.past and event.status != 'cancelled' %}
+                    <span class="badge" style="margin-left: 8px; background:#f1f5f9; color:#94a3b8;">Completed</span>
+                {% endif %}
+            </div>
+            <div class="timeline-title">{{ event.title }}</div>
+            <div class="timeline-details">
+                <div>
+                    <strong>Location:</strong> {{ event.location }}
+                </div>
+                {% if user.is_staff_role %}
+                <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    {% if event.type == 'game' %}
+                        <a href="{% url 'match_edit' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Edit</a>
+                        {% if event.status != 'cancelled' %}
+                            <a href="{% url 'match_cancel' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Cancel</a>
+                        {% endif %}
+                        {% if not event.avail_request %}
+                            <form method="post" action="{% url 'request_availability' 'match' event.id %}" style="display: inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Request Availability</button>
+                            </form>
+                        {% else %}
+                            <a href="{% url 'availability_summary' 'match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">View Availability</a>
+                        {% endif %}
+                    {% else %}
+                        <a href="{% url 'practice_edit' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Edit</a>
+                        <a href="{% url 'practice_detail' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Drills</a>
+                        {% if not event.avail_request %}
+                            <form method="post" action="{% url 'request_availability' 'practice' event.id %}" style="display: inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Request Availability</button>
+                            </form>
+                        {% else %}
+                            <a href="{% url 'availability_summary' 'practice' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">View Availability</a>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+    {% if not events %}
+    <div class="card" style="text-align: center; padding: 40px;">
+        <p style="color: #64748b;">No events scheduled yet.</p>
+        {% if user.is_staff_role %}
+        <a href="{% url 'match_create' %}" class="btn btn-primary" style="margin-top: 16px;">Add First Event</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

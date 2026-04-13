@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Dashboard</h2>
+    <p>Welcome back, {{ user.get_full_name|default:user.email }}! Here's your team overview.</p>
+</div>
+
+{% if pending_responses %}
+<div class="card" style="margin-bottom: 24px; border-left: 4px solid #f59e0b;">
+    <h3>📋 Pending Availability Requests</h3>
+    {% for resp in pending_responses %}
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #fffbeb; border-radius: 8px; margin-top: 12px;">
+        <span>{{ resp.request.event }}</span>
+        <form method="post" action="{% url 'availability_respond' resp.pk %}" style="display: flex; gap: 8px;">
+            {% csrf_token %}
+            <button type="submit" name="status" value="available" class="btn btn-success" style="padding: 6px 12px; font-size: 13px;">Available</button>
+            <button type="submit" name="status" value="unavailable" class="btn btn-danger" style="padding: 6px 12px; font-size: 13px;">Unavailable</button>
+            <button type="submit" name="status" value="maybe" class="btn btn-secondary" style="padding: 6px 12px; font-size: 13px;">Maybe</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <div class="stat-content">
+            <div class="stat-label">Total Players</div>
+            <div class="stat-value">{{ player_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-content">
+            <div class="stat-label">Win Rate</div>
+            <div class="stat-value">{{ win_rate }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">📅</div>
+        <div class="stat-content">
+            <div class="stat-label">Upcoming Games</div>
+            <div class="stat-value">{{ upcoming_matches|length }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">⭐</div>
+        <div class="stat-content">
+            <div class="stat-label">Season Record</div>
+            <div class="stat-value">{{ wins }}-{{ losses }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Dashboard Grid -->
+<div class="dashboard-grid">
+    <!-- Calendar -->
+    <div class="card calendar-card" style="grid-column: 1 / -1;">
+        <div class="cal-header">
+            <button class="cal-nav" onclick="changeMonth(-1)">&#9664;</button>
+            <h3 id="calMonthYear"></h3>
+            <button class="cal-nav" onclick="changeMonth(1)">&#9654;</button>
+        </div>
+        <div class="cal-legend">
+            <span class="cal-legend-item"><span class="cal-dot match"></span> Match</span>
+            <span class="cal-legend-item"><span class="cal-dot practice"></span> Practice</span>
+        </div>
+        <div class="cal-weekdays">
+            <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+    </div>
+
+    <!-- Upcoming Games -->
+    <div class="card">
+        <h3>Upcoming Games</h3>
+        <div class="games-list">
+            {% for m in upcoming_matches %}
+            <div class="game-item">
+                <div class="game-date">
+                    <div class="date-day">{{ m.date.day }}</div>
+                    <div class="date-month">{{ m.date|date:"M"|upper }}</div>
+                </div>
+                <div class="game-details">
+                    <div class="game-opponent">{% if m.is_home %}vs{% else %}@{% endif %} {{ m.opponent }}</div>
+                    <div class="game-time">{{ m.time|time:"g:i A" }} - {{ m.location }}</div>
+                </div>
+
+            </div>
+            {% empty %}
+            <div style="color: #64748b; text-align: center; padding: 20px;">No upcoming games</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Recent Results -->
+    <div class="card">
+        <h3>Recent Results</h3>
+        <div class="results-list">
+            {% for r in results_data %}
+            <div class="result-item {{ r.result }}">
+                <div class="result-indicator">{{ r.result|upper|truncatechars:1 }}</div>
+                <div class="result-details">
+                    <div class="result-opponent">{% if r.match.is_home %}vs{% else %}@{% endif %} {{ r.match.opponent }}</div>
+                    <div class="result-score">{{ r.our_sets }}-{{ r.their_sets }} ({{ r.set_scores|join:", " }})</div>
+                </div>
+            </div>
+            {% empty %}
+            <div style="color: #64748b; text-align: center; padding: 20px;">No completed matches yet</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- This Week's Practices -->
+    <div class="card">
+        <h3>This Week's Practices</h3>
+        <div class="practice-list">
+            {% for p in week_practices %}
+            <div class="practice-item">
+                <div class="practice-day">{{ p.date|date:"l" }}</div>
+                <div class="practice-time">{{ p.time|time:"g:i A" }}</div>
+                <div class="practice-focus">{{ p.focus }}</div>
+            </div>
+            {% empty %}
+            <div style="color: #64748b; text-align: center; padding: 20px;">No practices this week</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+const calendarEvents = JSON.parse('{{ calendar_events_json|escapejs }}');
+const todayStr = new Date().toISOString().slice(0, 10);
+let calMonth = new Date().getMonth();
+let calYear = new Date().getFullYear();
+
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+function renderCalendar() {
+    const firstDay = new Date(calYear, calMonth, 1).getDay();
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    document.getElementById('calMonthYear').textContent =
+        new Date(calYear, calMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    let html = '';
+    for (let i = 0; i < firstDay; i++) html += '<div class="cal-day empty"></div>';
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const ds = calYear + '-' + pad(calMonth + 1) + '-' + pad(day);
+        const evts = calendarEvents.filter(e => e.date === ds);
+        const isToday = ds === todayStr;
+        let dots = '';
+        let tooltipLines = [];
+        evts.forEach(e => {
+            const cls = e.type === 'match' ? 'match' : 'practice';
+            dots += '<span class="cal-dot ' + cls + '"></span>';
+            tooltipLines.push(e.time + ' — ' + e.title);
+        });
+        const hasEvt = evts.length > 0;
+        html += '<div class="cal-day' + (isToday ? ' today' : '') + (hasEvt ? ' has-events' : '') + '"'
+            + (hasEvt ? ' onclick="window.location.href=\'/schedule/\'"' : '') + '>'
+            + '<span class="cal-day-num">' + day + '</span>'
+            + '<div class="cal-dots">' + dots + '</div>'
+            + (hasEvt ? '<div class="cal-tooltip">' + tooltipLines.join('<br>') + '</div>' : '')
+            + '</div>';
+    }
+    document.getElementById('calGrid').innerHTML = html;
+}
+
+function changeMonth(d) {
+    calMonth += d;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    renderCalendar();
+}
+
+renderCalendar();
+</script>
+{% endblock %}

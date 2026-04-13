@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} Drill - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>{{ action }} Drill</h2>
+    <p>{% if action == 'Create' %}Add a new drill to the library.{% else %}Update drill details.{% endif %}</p>
+</div>
+<div class="card" style="max-width: 600px;">
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+        <div class="form-group">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {% if field.name == 'description' %}
+                <textarea name="{{ field.name }}" id="{{ field.id_for_label }}" rows="4" style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px;">{{ field.value|default_if_none:'' }}</textarea>
+            {% else %}
+                {{ field }}
+            {% endif %}
+            {% if field.errors %}
+                {% for error in field.errors %}
+                <span style="color: #dc2626; font-size: 13px;">{{ error }}</span>
+                {% endfor %}
+            {% endif %}
+        </div>
+        {% endfor %}
+        <div style="display: flex; gap: 8px; margin-top: 16px;">
+            <button type="submit" class="btn btn-primary">{% if action == 'Create' %}Create Drill{% else %}Save Changes{% endif %}</button>
+            <a href="{% url 'drill_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
