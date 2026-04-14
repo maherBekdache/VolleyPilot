@@ -35,20 +35,18 @@
     {% for event in group.list %}
     {% if not user.is_fan_role or event.type == 'game' %}
     <div class="timeline-item{% if event.past %} past{% endif %}">
-        <div class="timeline-marker{% if not user.is_fan_role and event.type == 'practice' %} practice{% endif %}"></div>
-        <div class="timeline-content{% if not user.is_fan_role and event.type == 'practice' %} type-practice{% endif %}">
+        <div class="timeline-marker {% if event.type == 'practice' %}practice{% endif %}"></div>
+        <div class="timeline-content{% if event.type == 'practice' %} type-practice{% endif %}">
             <div class="timeline-date">
                 {{ event.time|time:"g:i A" }}
-                {% if not user.is_fan_role %}
-                    {% if event.type == 'game' %}
-                        {% if event.is_home %}
-                            <span class="badge badge-home" style="margin-left: 8px;">🏠 Home Game</span>
-                        {% else %}
-                            <span class="badge badge-away" style="margin-left: 8px;">✈️ Away Game</span>
-                        {% endif %}
+                {% if event.type == 'game' %}
+                    {% if event.is_home %}
+                        <span class="badge badge-home" style="margin-left: 8px;">🏠 Home Game</span>
                     {% else %}
-                        <span class="badge badge-practice" style="margin-left: 8px;">🏐 Practice</span>
+                        <span class="badge badge-away" style="margin-left: 8px;">✈️ Away Game</span>
                     {% endif %}
+                {% else %}
+                    <span class="badge badge-practice" style="margin-left: 8px;">🏐 Practice</span>
                 {% endif %}
                 {% if event.status == 'cancelled' %}
                     <span class="badge badge-danger" style="margin-left: 8px;">Cancelled</span>
@@ -68,6 +66,11 @@
                         <a href="{% url 'match_edit' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Edit</a>
                         {% if event.status != 'cancelled' %}
                             <a href="{% url 'match_cancel' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Cancel</a>
+                        {% endif %}
+                        {% if event.status == 'scheduled' %}
+                            <a href="{% url 'start_match' event.id %}" class="btn btn-primary" style="font-size: 13px; padding: 4px 12px;">🏐 Start Match</a>
+                        {% elif event.status == 'completed' %}
+                            <a href="{% url 'live_match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">📊 Match Log</a>
                         {% endif %}
                         {% if not event.avail_request %}
                             <form method="post" action="{% url 'request_availability' 'match' event.id %}" style="display: inline;">

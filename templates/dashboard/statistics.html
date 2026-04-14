@@ -225,7 +225,7 @@ function applyStatsFilters() {
                     <td style="color: #16a34a;">{{ r.won }}</td>
                     <td style="color: #dc2626;">{{ r.lost }}</td>
                     <td>
-                        <strong style="color: '{% if r.net > 0 %}#16a34a{% elif r.net < 0 %}#dc2626{% else %}#64748b{% endif %}'">
+                        <strong style="color: {% if r.net > 0 %}#16a34a{% elif r.net < 0 %}#dc2626{% else %}#64748b{% endif %};">
                             {% if r.net > 0 %}+{% endif %}{{ r.net }}
                         </strong>
                     </td>
