@@ -166,7 +166,8 @@ def invite_view(request):
             return redirect('roster')
     else:
         form = TeamInvitationForm()
-    return render(request, 'teams/invite_form.html', {'form': form, 'team': team})
+    pending_invites = TeamInvitation.objects.filter(team=team).order_by('-created_at')[:20]
+    return render(request, 'teams/invite_form.html', {'form': form, 'team': team, 'pending_invites': pending_invites})
 
 
 def accept_invite_view(request, token):

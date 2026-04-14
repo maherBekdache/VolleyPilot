@@ -1,26 +1,173 @@
 {% extends "base.html" %}
-{% block title %}Invite - VolleyPilot{% endblock %}
+{% block title %}Invite Member — VolleyPilot{% endblock %}
+
+{% block extra_css %}
+<style>
+.invite-wrap { max-width: 600px; }
+.invite-card {
+    background: #fff; border-radius: 14px;
+    padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    margin-bottom: 20px;
+}
+.invite-header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 28px; padding-bottom: 20px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.invite-icon {
+    width: 52px; height: 52px;
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; flex-shrink: 0;
+}
+.invite-header h3 { font-size: 20px; font-weight: 700; color: #1e293b; margin-bottom: 2px; }
+.invite-header p  { font-size: 13px; color: #64748b; }
+
+.fg { margin-bottom: 20px; }
+.fg label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.fg input, .fg select {
+    width: 100%; padding: 11px 14px;
+    border: 1.5px solid #e2e8f0; border-radius: 9px;
+    font-size: 14px; font-family: inherit;
+    transition: border-color .15s, box-shadow .15s; background: #fff;
+}
+.fg input:focus, .fg select:focus {
+    outline: none; border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139,92,246,.1);
+}
+.fg .hint { font-size: 12px; color: #94a3b8; margin-top: 5px; }
+
+.role-cards {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.role-card { position: relative; }
+.role-card input[type=radio] { position: absolute; opacity: 0; }
+.role-card label {
+    display: block; padding: 14px 16px;
+    border: 1.5px solid #e2e8f0; border-radius: 10px;
+    cursor: pointer; transition: all .15s; margin: 0;
+}
+.role-card input[type=radio]:checked + label {
+    border-color: #8b5cf6; background: #faf5ff;
+}
+.role-card label:hover { border-color: #c4b5fd; }
+.role-card-title { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
+.role-card-desc  { font-size: 12px; color: #64748b; }
+
+.form-actions { display: flex; gap: 10px; margin-top: 28px; padding-top: 20px; border-top: 1px solid #f1f5f9; }
+
+/* Pending invites table */
+.invites-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.invites-table th {
+    text-align: left; padding: 10px 12px;
+    font-size: 12px; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: .4px;
+    background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+}
+.invites-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; color: #374151; }
+.invites-table tr:last-child td { border: none; }
+.status-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 12px; font-weight: 600;
+}
+.status-pending  { background: #fef9c3; color: #854d0e; }
+.status-accepted { background: #dcfce7; color: #166534; }
+.status-declined { background: #fee2e2; color: #991b1b; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
-    <h2>Invite Staff to {{ team.name }}</h2>
-    <p>Send an email invitation to join the team.</p>
+    <h2>Invite Team Members</h2>
+    <p>Send invitations to coaches, managers, and staff for <strong>{{ team.name }}</strong>.</p>
 </div>
-<div class="card" style="max-width: 500px;">
-    <form method="post">
-        {% csrf_token %}
-        <div class="form-group">
-            <label for="id_email">Email Address</label>
-            <input type="email" name="email" id="id_email" required>
+
+<div class="invite-wrap">
+    <div class="invite-card">
+        <div class="invite-header">
+            <div class="invite-icon">✉️</div>
+            <div>
+                <h3>Send Invitation</h3>
+                <p>They'll receive a link to join {{ team.name }}.</p>
+            </div>
         </div>
-        <div class="form-group">
-            <label for="id_role">Role</label>
-            <select name="role" id="id_role">
-                <option value="assistant">Assistant Coach</option>
-                <option value="manager">Manager</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary">Send Invitation</button>
-        <a href="{% url 'roster' %}" class="btn btn-secondary" style="margin-left: 8px;">Cancel</a>
-    </form>
+
+        <form method="post">
+            {% csrf_token %}
+
+            <!-- VT-26: Invite via email -->
+            <div class="fg">
+                <label for="id_email">Email Address <span style="color:#ef4444;">*</span></label>
+                <input type="email" name="email" id="id_email" required
+                       placeholder="colleague@example.com"
+                       value="{{ form.email.value|default:'' }}">
+                <div class="hint">An invitation link will be sent to this address.</div>
+                {% if form.email.errors %}
+                <div style="font-size:12px;color:#dc2626;margin-top:4px;">{{ form.email.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="fg">
+                <label>Role</label>
+                <div class="role-cards">
+                    <div class="role-card">
+                        <input type="radio" name="role" id="role_assistant" value="assistant"
+                               {% if form.role.value == 'assistant' or not form.role.value %}checked{% endif %}>
+                        <label for="role_assistant">
+                            <div class="role-card-title">🏋️ Assistant Coach</div>
+                            <div class="role-card-desc">Can manage lineups and track stats during matches.</div>
+                        </label>
+                    </div>
+                    <div class="role-card">
+                        <input type="radio" name="role" id="role_manager" value="manager"
+                               {% if form.role.value == 'manager' %}checked{% endif %}>
+                        <label for="role_manager">
+                            <div class="role-card-title">📋 Manager</div>
+                            <div class="role-card-desc">Can manage schedule, roster, and team logistics.</div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Send Invitation</button>
+                <a href="{% url 'roster' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Pending invitations list -->
+    {% if pending_invites %}
+    <div class="invite-card">
+        <h4 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:16px;">Pending Invitations</h4>
+        <table class="invites-table">
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Sent</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inv in pending_invites %}
+                <tr>
+                    <td>{{ inv.email }}</td>
+                    <td>{{ inv.get_role_display }}</td>
+                    <td>
+                        <span class="status-badge status-{{ inv.status }}">
+                            {% if inv.status == 'pending' %}⏳{% elif inv.status == 'accepted' %}✓{% else %}✕{% endif %}
+                            {{ inv.get_status_display }}
+                        </span>
+                    </td>
+                    <td style="color:#94a3b8;font-size:13px;">{{ inv.created_at|date:"M j" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

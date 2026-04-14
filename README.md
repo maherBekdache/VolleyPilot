@@ -1,6 +1,6 @@
 # VolleyPilot — Sprint 1 Demo
 
-Volleyball team management app built with Django for EECE 430.
+Volleyball team management app built with Django for CMPS 430.
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ Open **http://127.0.0.1:8000** in your browser.
 | Assistant | assistant@volleypilot.com    | demo1234   |
 | Player    | player@volleypilot.com       | demo1234   |
 
-New users can register and choose any role. Team-related roles (Coach, Assistant, Player, etc.) require selecting a team during registration.
+New users register as **fan** by default and see league-wide data.
 
 ## Features
 
@@ -51,7 +51,7 @@ New users can register and choose any role. Team-related roles (Coach, Assistant
 | Game Results     | Win/loss history with set scores, filter by outcome             |
 | Practice Drills  | Drill library with search/filter, assign drills to practices    |
 | Fan Dashboard    | League-wide browsing for fan-role users                         |
-| Registration     | Role selection + team picker; auto-links player by email        |
+| Registration     | Auto-links player accounts by email match                       |
 
 ## Role Permissions
 

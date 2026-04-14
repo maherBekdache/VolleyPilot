@@ -26,4 +26,5 @@ urlpatterns = [
     path('schedule/', include('schedule.urls')),
     path('drills/', include('drills.urls')),
     path('dashboard/', include('dashboard.urls')),
+    path('matches/', include('matches.urls')),
 ]

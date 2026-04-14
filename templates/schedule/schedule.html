@@ -64,6 +64,11 @@
                         {% if event.status != 'cancelled' %}
                             <a href="{% url 'match_cancel' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Cancel</a>
                         {% endif %}
+                        {% if event.status == 'scheduled' %}
+                            <a href="{% url 'start_match' event.id %}" class="btn btn-primary" style="font-size: 13px; padding: 4px 12px;">🏐 Start Match</a>
+                        {% elif event.status == 'completed' %}
+                            <a href="{% url 'live_match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">📊 Match Log</a>
+                        {% endif %}
                         {% if not event.avail_request %}
                             <form method="post" action="{% url 'request_availability' 'match' event.id %}" style="display: inline;">
                                 {% csrf_token %}
