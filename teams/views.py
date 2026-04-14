@@ -1,9 +1,11 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db.models import Count
 from .models import Team, Player, TeamInvitation, TeamMembership
 from .forms import TeamForm, PlayerForm, TeamInvitationForm
 from accounts.models import User
+from matches.models import ActionTag
 
 
 def get_user_team(user):
@@ -13,7 +15,6 @@ def get_user_team(user):
     team = Team.objects.filter(created_by=user).first()
     if team:
         return team
-    # Check if user has a linked player profile
     player = Player.objects.filter(user=user).first()
     if player:
         return player.team
@@ -22,7 +23,6 @@ def get_user_team(user):
 
 @login_required
 def team_create_view(request):
-    # If user already has a team, go to roster
     if get_user_team(request.user):
         return redirect('roster')
     if not request.user.is_staff_role:
@@ -39,12 +39,14 @@ def team_create_view(request):
             return redirect('roster')
     else:
         form = TeamForm()
-    return render(request, 'teams/team_form.html', {'form': form})
+    return render(request, 'teams/team_form.html', {
+        'form': form,
+        'age_choices': TeamForm.AGE_CHOICES,
+    })
 
 
 @login_required
 def roster_view(request):
-    # Fans see league-wide rosters with team filter
     if request.user.is_fan_role:
         team_id = request.GET.get('team', '')
         teams = Team.objects.all()
@@ -89,6 +91,36 @@ def roster_view(request):
 
 
 @login_required
+def player_profile_view(request, pk):
+    if request.user.is_fan_role:
+        player = get_object_or_404(Player, pk=pk, is_active=True)
+        can_manage = False
+    else:
+        team = get_user_team(request.user)
+        player = get_object_or_404(Player, pk=pk, team=team, is_active=True)
+        can_manage = request.user.is_staff_role
+
+    tags = ActionTag.objects.filter(player=player)
+    stats = {
+        'kills': tags.filter(tag_type='kill').count(),
+        'blocks': tags.filter(tag_type='block').count(),
+        'aces': tags.filter(tag_type='ace').count(),
+        'assists': tags.filter(tag_type='assist').count(),
+        'digs': tags.filter(tag_type='dig').count(),
+        'errors': tags.filter(tag_type__in=['serve_error', 'attack_error']).count(),
+    }
+    recent_tags = tags.select_related('action', 'action__live_match', 'action__live_match__match').order_by('-action__timestamp')[:8]
+    total_actions = tags.count()
+    return render(request, 'teams/player_profile.html', {
+        'player': player,
+        'stats': stats,
+        'recent_tags': recent_tags,
+        'total_actions': total_actions,
+        'can_manage': can_manage,
+    })
+
+
+@login_required
 def player_add_view(request):
     team = get_user_team(request.user)
     if not team or not request.user.is_staff_role:
@@ -99,7 +131,6 @@ def player_add_view(request):
         if form.is_valid():
             player = form.save(commit=False)
             player.team = team
-            # Auto-link if a user with this email already exists
             if player.email:
                 existing_user = User.objects.filter(email=player.email).first()
                 if existing_user:
@@ -129,7 +160,7 @@ def player_edit_view(request, pk):
         if form.is_valid():
             form.save()
             messages.success(request, f'{player.name} updated.')
-            return redirect('roster')
+            return redirect('player_profile', pk=player.pk)
     else:
         form = PlayerForm(instance=player, team=team)
     return render(request, 'teams/player_form.html', {'form': form, 'action': 'Edit'})
@@ -144,7 +175,7 @@ def player_delete_view(request, pk):
         return redirect('roster')
     if request.method == 'POST':
         player.is_active = False
-        player.save()
+        player.save(update_fields=['is_active'])
         messages.success(request, f'{player.name} removed from roster.')
         return redirect('roster')
     return render(request, 'teams/player_confirm_delete.html', {'player': player})
@@ -193,4 +224,3 @@ def accept_invite_view(request, token):
             messages.info(request, 'Invitation declined.')
         return redirect('dashboard')
     return render(request, 'teams/accept_invite.html', {'invite': invite})
-

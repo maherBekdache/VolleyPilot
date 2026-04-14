@@ -7,6 +7,9 @@ class LiveMatch(models.Model):
     is_active = models.BooleanField(default=True)
     our_serve = models.BooleanField(default=True)
     current_rotation = models.PositiveIntegerField(default=1)
+    lineup = models.JSONField(default=dict, blank=True)
+    bench = models.JSONField(default=list, blank=True)
+    first_server = models.PositiveIntegerField(default=1)
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
 
@@ -37,6 +40,9 @@ class Action(models.Model):
         ('timeout', 'Timeout'),
         ('rotation', 'Rotation'),
         ('undo', 'Undo'),
+        ('lineup', 'Lineup'),
+        ('match_start', 'Match Start'),
+        ('technical_timeout', 'Technical Timeout'),
     ]
     live_match = models.ForeignKey(LiveMatch, on_delete=models.CASCADE, related_name='actions')
     action_type = models.CharField(max_length=20, choices=ACTION_TYPES)
@@ -70,4 +76,3 @@ class ActionTag(models.Model):
 
     def __str__(self):
         return f"{self.tag_type} by {self.player}"
-

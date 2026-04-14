@@ -5,7 +5,7 @@ from .models import Match, Practice
 class MatchForm(forms.ModelForm):
     class Meta:
         model = Match
-        fields = ['date', 'time', 'location', 'opponent', 'is_home']
+        fields = ['title', 'date', 'time', 'location', 'opponent', 'is_home', 'ruleset']
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date'}),
             'time': forms.TimeInput(attrs={'type': 'time'}),

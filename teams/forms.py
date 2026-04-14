@@ -3,6 +3,17 @@ from .models import Team, Player, TeamInvitation
 
 
 class TeamForm(forms.ModelForm):
+    AGE_CHOICES = [
+        ('U12', 'U12'),
+        ('U14', 'U14'),
+        ('U16', 'U16'),
+        ('U18', 'U18'),
+        ('Adult', 'Adult'),
+        ('Senior', 'Senior'),
+    ]
+
+    age_group = forms.ChoiceField(choices=[('', 'Select age group')] + AGE_CHOICES, required=False)
+
     class Meta:
         model = Team
         fields = ['name', 'age_group', 'club_affiliation']
@@ -35,5 +46,6 @@ class TeamInvitationForm(forms.ModelForm):
             'role': forms.Select(choices=[
                 ('assistant', 'Assistant Coach'),
                 ('manager', 'Manager'),
+                ('parent', 'Parent'),
             ])
         }

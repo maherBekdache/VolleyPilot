@@ -62,6 +62,20 @@ class Command(BaseCommand):
             player_user.save()
             self.stdout.write(self.style.SUCCESS('  Created player account (player@volleypilot.com / demo1234)'))
 
+        parent_user, created = User.objects.get_or_create(
+            email='parent@volleypilot.com',
+            defaults={
+                'username': 'parent',
+                'first_name': 'Nadine',
+                'last_name': 'Davis',
+                'role': 'parent',
+                'club': club,
+            }
+        )
+        if created:
+            parent_user.set_password('demo1234')
+            parent_user.save()
+
         # ── Team ──
         team, _ = Team.objects.get_or_create(
             name='AUB Eagles',
@@ -76,6 +90,7 @@ class Command(BaseCommand):
         from teams.models import TeamMembership
         TeamMembership.objects.get_or_create(team=team, user=coach, defaults={'role': 'coach'})
         TeamMembership.objects.get_or_create(team=team, user=assistant, defaults={'role': 'assistant'})
+        TeamMembership.objects.get_or_create(team=team, user=parent_user, defaults={'role': 'parent'})
 
         # ── Players (12) ──
         players_data = [
@@ -144,7 +159,7 @@ class Command(BaseCommand):
         for d, t, loc, opp, home in upcoming_matches_data:
             Match.objects.get_or_create(
                 team=team, date=d, opponent=opp,
-                defaults={'time': t, 'location': loc, 'is_home': home, 'created_by': coach}
+                defaults={'title': 'League Match', 'time': t, 'location': loc, 'is_home': home, 'ruleset': 'fivb_best_of_5', 'created_by': coach}
             )
 
         # Upcoming practices
@@ -193,8 +208,8 @@ class Command(BaseCommand):
             match, m_created = Match.objects.get_or_create(
                 team=team, date=match_date, opponent=opp_name,
                 defaults={
-                    'time': time(18, 0), 'location': 'AUB Gymnasium' if is_home else f'{opp_name.split()[0]} Arena',
-                    'is_home': is_home, 'status': 'completed', 'created_by': coach,
+                    'title': 'Conference Match', 'time': time(18, 0), 'location': 'AUB Gymnasium' if is_home else f'{opp_name.split()[0]} Arena',
+                    'is_home': is_home, 'ruleset': 'fivb_best_of_5', 'status': 'completed', 'created_by': coach,
                 }
             )
             if not m_created:

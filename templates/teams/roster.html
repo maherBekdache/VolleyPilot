@@ -3,7 +3,15 @@
 {% block content %}
 <div class="page-header">
     <h2>{% if is_fan %}League Rosters{% else %}Team Roster{% endif %}</h2>
-    <p>{% if is_fan %}Browse player rosters across all teams.{% else %}Manage your team players and their information.{% endif %}</p>
+    <p>
+        {% if is_fan %}
+            Browse player rosters across all teams.
+        {% elif user.is_parent_role %}
+            Read-only team roster access for parents.
+        {% else %}
+            Manage your team players and their information.
+        {% endif %}
+    </p>
 </div>
 
 {% if is_fan and all_teams %}
@@ -15,7 +23,6 @@
 </div>
 {% endif %}
 
-<!-- Toolbar -->
 <div class="toolbar">
     <div class="search-box">
         <span class="search-icon">🔍</span>
@@ -42,11 +49,10 @@
     </div>
 </div>
 
-<!-- Player Grid -->
 <div class="player-grid">
     {% for player in players %}
     <div class="player-card">
-        <a href="{% url 'statistics' %}?player={{ player.pk }}" style="text-decoration: none; color: inherit; display: block; cursor: pointer;">
+        <a href="{% url 'player_profile' player.pk %}" style="text-decoration: none; color: inherit; display: block; cursor: pointer;">
             <div class="player-header">
                 <div class="player-avatar">{{ player.jersey_number }}</div>
                 <div class="player-info">
@@ -87,7 +93,7 @@
 
 {% if user.is_coach %}
 <div style="margin-top: 24px;">
-    <a href="{% url 'invite' %}" class="btn btn-secondary">📧 Invite Staff Members</a>
+    <a href="{% url 'invite' %}" class="btn btn-secondary">📧 Invite Staff / Parents</a>
     <a href="{% url 'manage_roles' %}" class="btn btn-secondary">👤 Manage Roles</a>
 </div>
 {% endif %}

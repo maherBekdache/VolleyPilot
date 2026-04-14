@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Start {{ match.display_title }} - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>Start Match Setup</h2>
+    <p>{{ team.name }} vs {{ match.opponent }} · {{ match.date|date:"M j, Y" }} · {{ match.get_ruleset_display }}</p>
+</div>
+
+<form method="post" class="dashboard-grid">
+    {% csrf_token %}
+    <div class="card">
+        <h3>Starting Lineup</h3>
+        <p style="color:#64748b;margin-bottom:16px;">Assign players to positions 1–6. Position 1 is the initial server spot.</p>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;">
+            {% for pos in '123456' %}
+            <div class="form-group">
+                <label>Position {{ pos }}</label>
+                <select name="position_{{ pos }}" required>
+                    <option value="">Select player</option>
+                    {% for p in players %}
+                    <option value="{{ p.pk }}" {% if selected_lineup.pos == p.pk %}selected{% endif %}>#{{ p.jersey_number }} {{ p.name }} — {{ p.position }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="form-group" style="margin-top:16px;">
+            <label>First Server Position</label>
+            <select name="first_server">
+                {% for n in '123456' %}
+                <option value="{{ n }}" {% if first_server|stringformat:'s' == n %}selected{% endif %}>Position {{ n }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="submit" class="btn btn-primary">Launch Live Match</button>
+            <a href="{% url 'schedule' %}" class="btn btn-secondary">Back</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Bench Selection</h3>
+        <p style="color:#64748b;margin-bottom:16px;">Choose the players available on the bench.</p>
+        <div style="display:grid;grid-template-columns:1fr;gap:10px;max-height:420px;overflow:auto;">
+            {% for p in players %}
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;">
+                <input type="checkbox" name="bench" value="{{ p.pk }}" {% if p.pk in selected_bench %}checked{% endif %}>
+                <span style="font-weight:600;">#{{ p.jersey_number }} {{ p.name }}</span>
+                <span style="color:#64748b;font-size:13px;">{{ p.position }}</span>
+            </label>
+            {% endfor %}
+        </div>
+
+        <div style="margin-top:18px;padding:14px;background:#f8fafc;border-radius:10px;">
+            <h4 style="margin-bottom:10px;">Rotation Preview</h4>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;">
+                <div style="padding:10px;border-radius:10px;background:#e0f2fe;">Pos 4</div>
+                <div style="padding:10px;border-radius:10px;background:#e0f2fe;">Pos 3</div>
+                <div style="padding:10px;border-radius:10px;background:#e0f2fe;">Pos 2</div>
+                <div style="padding:10px;border-radius:10px;background:#dcfce7;">Pos 5</div>
+                <div style="padding:10px;border-radius:10px;background:#dcfce7;">Pos 6</div>
+                <div style="padding:10px;border-radius:10px;background:#fef3c7;">Pos 1 ★</div>
+            </div>
+            <div style="font-size:13px;color:#64748b;margin-top:10px;">The bottom-right slot is the serving position when the match begins.</div>
+        </div>
+    </div>
+</form>
+{% endblock %}

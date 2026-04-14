@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header">
     <h2>Schedule</h2>
-    <p>Upcoming games and practice sessions.</p>
+    <p>{% if user.is_parent_role %}Read-only team schedule access for parents.{% else %}Upcoming games and practice sessions.{% endif %}</p>
 </div>
 
 <div style="display:flex;gap:8px;margin-bottom:20px;">
@@ -19,13 +19,12 @@
     </div>
     <div style="display:flex;gap:8px;">
     {% if user.is_staff_role %}
-    <a href="{% url 'match_create' %}" class="btn btn-primary" style="margin-right: 8px;">+ Add Match</a>
+    <a href="{% url 'match_create' %}" class="btn btn-primary">+ Add Match</a>
     <a href="{% url 'practice_create' %}" class="btn btn-primary">+ Add Practice</a>
     {% endif %}
     </div>
 </div>
 
-<!-- Timeline -->
 <div class="timeline">
     {% regroup events by date as date_list %}
     {% for group in date_list %}
@@ -37,58 +36,35 @@
             <div class="timeline-date">
                 {{ event.time|time:"g:i A" }}
                 {% if event.type == 'game' %}
-                    {% if event.is_home %}
-                        <span class="badge badge-home" style="margin-left: 8px;">🏠 Home Game</span>
-                    {% else %}
-                        <span class="badge badge-away" style="margin-left: 8px;">✈️ Away Game</span>
-                    {% endif %}
+                    <span class="badge {% if event.is_home %}badge-home{% else %}badge-away{% endif %}" style="margin-left: 8px;">{% if event.is_home %}🏠 Home{% else %}✈️ Away{% endif %}</span>
+                    <span class="badge" style="margin-left:8px;background:#eff6ff;color:#1d4ed8;">{{ event.ruleset }}</span>
                 {% else %}
                     <span class="badge badge-practice" style="margin-left: 8px;">🏐 Practice</span>
                 {% endif %}
-                {% if event.status == 'cancelled' %}
-                    <span class="badge badge-danger" style="margin-left: 8px;">Cancelled</span>
-                {% endif %}
-                {% if event.past and event.status != 'cancelled' %}
-                    <span class="badge" style="margin-left: 8px; background:#f1f5f9; color:#94a3b8;">Completed</span>
-                {% endif %}
+                {% if event.status == 'cancelled' %}<span class="badge badge-danger" style="margin-left: 8px;">Cancelled</span>{% endif %}
+                {% if event.past and event.status != 'cancelled' %}<span class="badge" style="margin-left: 8px; background:#f1f5f9; color:#94a3b8;">Completed</span>{% endif %}
             </div>
             <div class="timeline-title">{{ event.title }}</div>
             <div class="timeline-details">
-                <div>
-                    <strong>Location:</strong> {{ event.location }}
-                </div>
+                <div><strong>Location:</strong> {{ event.location }}</div>
                 {% if user.is_staff_role %}
                 <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
                     {% if event.type == 'game' %}
                         <a href="{% url 'match_edit' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Edit</a>
-                        {% if event.status != 'cancelled' %}
-                            <a href="{% url 'match_cancel' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Cancel</a>
-                        {% endif %}
+                        {% if event.status != 'cancelled' %}<a href="{% url 'match_cancel' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Cancel</a>{% endif %}
                         {% if event.status == 'scheduled' %}
-                            <a href="{% url 'start_match' event.id %}" class="btn btn-primary" style="font-size: 13px; padding: 4px 12px;">🏐 Start Match</a>
-                        {% elif event.status == 'completed' %}
-                            <a href="{% url 'live_match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">📊 Match Log</a>
-                        {% endif %}
-                        {% if not event.avail_request %}
-                            <form method="post" action="{% url 'request_availability' 'match' event.id %}" style="display: inline;">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Request Availability</button>
-                            </form>
-                        {% else %}
-                            <a href="{% url 'availability_summary' 'match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">View Availability</a>
+                            <a href="{% url 'start_match' event.id %}" class="btn btn-primary" style="font-size: 13px; padding: 4px 12px;">🏐 Start Match Setup</a>
+                        {% elif event.has_live %}
+                            <a href="{% url 'live_match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">📊 Open Live Match</a>
                         {% endif %}
                     {% else %}
                         <a href="{% url 'practice_edit' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Edit</a>
                         <a href="{% url 'practice_detail' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Drills</a>
-                        {% if not event.avail_request %}
-                            <form method="post" action="{% url 'request_availability' 'practice' event.id %}" style="display: inline;">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Request Availability</button>
-                            </form>
-                        {% else %}
-                            <a href="{% url 'availability_summary' 'practice' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">View Availability</a>
-                        {% endif %}
                     {% endif %}
+                </div>
+                {% elif event.type == 'game' and event.has_live %}
+                <div style="margin-top:12px;">
+                    <a href="{% url 'live_match' event.id %}" class="btn btn-secondary" style="font-size:13px;padding:4px 12px;">View Match Log</a>
                 </div>
                 {% endif %}
             </div>
@@ -99,9 +75,7 @@
     {% if not events %}
     <div class="card" style="text-align: center; padding: 40px;">
         <p style="color: #64748b;">No events scheduled yet.</p>
-        {% if user.is_staff_role %}
-        <a href="{% url 'match_create' %}" class="btn btn-primary" style="margin-top: 16px;">Add First Event</a>
-        {% endif %}
+        {% if user.is_staff_role %}<a href="{% url 'match_create' %}" class="btn btn-primary" style="margin-top: 16px;">Add First Event</a>{% endif %}
     </div>
     {% endif %}
 </div>

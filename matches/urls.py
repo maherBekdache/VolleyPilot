@@ -8,8 +8,7 @@ urlpatterns = [
     path('<int:match_id>/point/', views.record_point, name='record_point'),
     path('<int:match_id>/rotate/', views.manual_rotate, name='manual_rotate'),
     path('<int:match_id>/sub/', views.make_substitution, name='make_substitution'),
-    path('<int:match_id>/libero/', views.libero_swap, name='libero_swap'),
     path('<int:match_id>/timeout/', views.call_timeout, name='call_timeout'),
     path('<int:match_id>/lineup/', views.set_lineup, name='set_lineup'),
-    path('<int:match_id>/contrast/', views.toggle_high_contrast, name='toggle_high_contrast'),
+    path('<int:match_id>/undo/', views.undo_last_action, name='undo_last_action'),
 ]

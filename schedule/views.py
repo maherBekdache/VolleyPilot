@@ -13,7 +13,6 @@ def schedule_view(request):
     if not team and not request.user.is_fan_role:
         return redirect('team_create')
     today = timezone.now().date()
-    # Fans see all teams' matches (no practices)
     if request.user.is_fan_role:
         matches = Match.objects.all()
         practices = Practice.objects.none()
@@ -25,10 +24,13 @@ def schedule_view(request):
         prefix = f"{m.team.name} " if request.user.is_fan_role else ""
         events.append({
             'type': 'game', 'id': m.id, 'date': m.date, 'time': m.time,
-            'title': f"{prefix}{'vs' if m.is_home else '@'} {m.opponent}",
+            'title': f"{prefix}{m.display_title}: {'vs' if m.is_home else '@'} {m.opponent}",
             'location': m.location, 'is_home': m.is_home, 'status': m.status,
             'avail_request': m.availability_requests.exists(),
             'past': m.date < today,
+            'ruleset': m.get_ruleset_display(),
+            'can_start': (not request.user.is_fan_role and request.user.is_staff_role and m.status == 'scheduled'),
+            'has_live': hasattr(m, 'live'),
         })
     for p in practices:
         events.append({
@@ -62,7 +64,7 @@ def match_create_view(request):
             match.team = team
             match.created_by = request.user
             match.save()
-            messages.success(request, 'Match created.')
+            messages.success(request, 'Match event created successfully.')
             return redirect('schedule')
     else:
         form = MatchForm()
@@ -96,7 +98,7 @@ def match_cancel_view(request, pk):
         return redirect('schedule')
     if request.method == 'POST':
         match.status = 'cancelled'
-        match.save()
+        match.save(update_fields=['status'])
         messages.success(request, 'Match cancelled.')
         return redirect('schedule')
     return render(request, 'schedule/confirm_cancel.html', {'event': match, 'event_type': 'Match'})
@@ -204,4 +206,3 @@ def availability_summary_view(request, event_type, pk):
         'event': event, 'event_type': event_type,
         'responses': responses, 'summary': summary,
     })
-

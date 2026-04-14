@@ -8,12 +8,20 @@ class Match(models.Model):
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
     ]
+    RULESET_CHOICES = [
+        ('fivb_best_of_5', 'FIVB Indoor — Best of 5'),
+        ('best_of_3', 'Short Match — Best of 3'),
+        ('training_scrimmage', 'Training Scrimmage'),
+    ]
+
     team = models.ForeignKey('teams.Team', on_delete=models.CASCADE, related_name='matches')
+    title = models.CharField(max_length=120, blank=True)
     date = models.DateField()
     time = models.TimeField()
     location = models.CharField(max_length=200)
     opponent = models.CharField(max_length=100)
     is_home = models.BooleanField(default=True)
+    ruleset = models.CharField(max_length=30, choices=RULESET_CHOICES, default='fivb_best_of_5')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='scheduled')
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
@@ -23,7 +31,11 @@ class Match(models.Model):
 
     def __str__(self):
         prefix = 'vs' if self.is_home else '@'
-        return f"{prefix} {self.opponent} on {self.date}"
+        return f"{self.display_title} {prefix} {self.opponent} on {self.date}"
+
+    @property
+    def display_title(self):
+        return self.title or 'Match'
 
 
 class Practice(models.Model):
@@ -85,4 +97,3 @@ class AvailabilityResponse(models.Model):
 
     def __str__(self):
         return f"{self.player.name}: {self.status}"
-

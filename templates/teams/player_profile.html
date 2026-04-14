@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ player.name }} - VolleyPilot{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>#{{ player.jersey_number }} {{ player.name }}</h2>
+    <p>{{ player.team.name }} · {{ player.position }}</p>
+</div>
+
+<div class="dashboard-grid" style="margin-bottom:24px;">
+    <div class="card">
+        <h3>Player Profile</h3>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+            <div><strong>Email:</strong><br>{{ player.email|default:'—' }}</div>
+            <div><strong>Year:</strong><br>{{ player.year|default:'—' }}</div>
+            <div><strong>Height:</strong><br>{{ player.height|default:'—' }}</div>
+            <div><strong>Status:</strong><br>{% if player.is_active %}Active{% else %}Inactive{% endif %}</div>
+        </div>
+        {% if player.notes %}
+        <div style="margin-top:16px;padding:14px;background:#f8fafc;border-radius:10px;">
+            <strong>Notes</strong>
+            <div style="margin-top:6px;color:#475569;">{{ player.notes }}</div>
+        </div>
+        {% endif %}
+        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+            <a href="{% url 'statistics' %}?player={{ player.pk }}" class="btn btn-secondary">View Full Stats</a>
+            <a href="{% url 'roster' %}" class="btn btn-secondary">Back to Roster</a>
+            {% if can_manage %}
+            <a href="{% url 'player_edit' player.pk %}" class="btn btn-primary">Edit Player</a>
+            <a href="{% url 'player_delete' player.pk %}" class="btn btn-danger">Remove Player</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Performance Snapshot</h3>
+        <div class="stats-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));">
+            <div class="stat-card"><div class="stat-content"><div class="stat-label">Kills</div><div class="stat-value">{{ stats.kills }}</div></div></div>
+            <div class="stat-card"><div class="stat-content"><div class="stat-label">Blocks</div><div class="stat-value">{{ stats.blocks }}</div></div></div>
+            <div class="stat-card"><div class="stat-content"><div class="stat-label">Aces</div><div class="stat-value">{{ stats.aces }}</div></div></div>
+            <div class="stat-card"><div class="stat-content"><div class="stat-label">Digs</div><div class="stat-value">{{ stats.digs }}</div></div></div>
+            <div class="stat-card"><div class="stat-content"><div class="stat-label">Assists</div><div class="stat-value">{{ stats.assists }}</div></div></div>
+            <div class="stat-card"><div class="stat-content"><div class="stat-label">Errors</div><div class="stat-value">{{ stats.errors }}</div></div></div>
+        </div>
+        <div style="margin-top:12px;color:#64748b;font-size:13px;">Tagged match actions recorded: {{ total_actions }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Recent Match Events</h3>
+    {% if recent_tags %}
+    <div style="display:flex;flex-direction:column;gap:10px;">
+        {% for item in recent_tags %}
+        <div style="padding:14px;border:1px solid #e2e8f0;border-radius:10px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div>
+                <strong>{{ item.get_tag_type_display }}</strong>
+                <div style="font-size:13px;color:#64748b;">{{ item.action.live_match.match.opponent }} · Set {{ item.action.set_number }}</div>
+            </div>
+            <div style="font-size:13px;color:#64748b;">{{ item.action.timestamp|date:"M j, g:i A" }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:#64748b;">No tagged match events yet.</p>
+    {% endif %}
+</div>
+{% endblock %}
