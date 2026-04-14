@@ -14,7 +14,10 @@ class User(AbstractUser):
     ROLE_CHOICES = [
         ('coach', 'Coach'),
         ('assistant', 'Assistant Coach'),
+        ('manager', 'Manager'),
         ('player', 'Player'),
+        ('parent', 'Parent'),
+        ('director', 'Club Director'),
         ('fan', 'Fan'),
     ]
     email = models.EmailField(unique=True)

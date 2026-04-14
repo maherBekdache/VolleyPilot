@@ -234,10 +234,8 @@ class Command(BaseCommand):
                     # They win this set
                     opp_score = min_points + random.randint(0, 5)
                     our_score = opp_score - random.randint(2, 6)
-                    if our_score < 10 and opp_score - 2 >= 15:
+                    if our_score < 10:
                         our_score = random.randint(15, opp_score - 2)
-                    elif our_score < 10:
-                        our_score = 10
                     their_wins_left -= 1
 
                 SetScore.objects.create(

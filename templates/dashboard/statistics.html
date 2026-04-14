@@ -25,9 +25,7 @@
     </div>
     <div class="filter-group">
         <div class="tabs" style="margin: 0;">
-            {% if not user.is_fan_role %}
-                <button class="tab {% if scope == 'team' %}active{% endif %}" onclick="setScope('team')">My Team</button>
-            {% endif %}
+            <button class="tab {% if scope == 'team' %}active{% endif %}" onclick="setScope('team')">My Team</button>
             <button class="tab {% if scope == 'league' %}active{% endif %}" onclick="setScope('league')">League-Wide</button>
         </div>
         <select id="teamFilter" onchange="applyStatsFilters()" style="{% if scope != 'league' %}display:none{% endif %}">
@@ -203,7 +201,6 @@ function applyStatsFilters() {
     </div>
 </div>
 
-{% if not user.is_fan_role %}
 <!-- Rotation Comparison -->
 <div style="margin-top: 32px;">
     <h3 style="margin-bottom: 24px; font-size: 24px; font-weight: 700; color: #1e293b;">Rotation Performance</h3>
@@ -225,7 +222,7 @@ function applyStatsFilters() {
                     <td style="color: #16a34a;">{{ r.won }}</td>
                     <td style="color: #dc2626;">{{ r.lost }}</td>
                     <td>
-                        <strong style="color: '{% if r.net > 0 %}#16a34a{% elif r.net < 0 %}#dc2626{% else %}#64748b{% endif %}'">
+                        <strong style="color: {% if r.net > 0 %}#16a34a{% elif r.net < 0 %}#dc2626{% else %}#64748b{% endif %};">
                             {% if r.net > 0 %}+{% endif %}{{ r.net }}
                         </strong>
                     </td>
@@ -236,5 +233,4 @@ function applyStatsFilters() {
         </table>
     </div>
 </div>
-{% endif %}
 {% endblock %}
