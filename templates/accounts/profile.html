@@ -1,38 +1,330 @@
 {% extends "base.html" %}
-{% block title %}Profile - VolleyPilot{% endblock %}
+{% block title %}My Profile — VolleyPilot{% endblock %}
+
+{% block extra_css %}
+<style>
+.settings-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 24px;
+    align-items: start;
+}
+@media (max-width: 720px) {
+    .settings-layout { grid-template-columns: 1fr; }
+    .settings-nav { display: flex; flex-wrap: wrap; gap: 4px; }
+}
+.settings-nav {
+    background: #fff;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    position: sticky;
+    top: 24px;
+}
+.settings-nav a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    color: #475569;
+    transition: all .15s;
+}
+.settings-nav a:hover { background: #f8fafc; color: #1e293b; }
+.settings-nav a.active { background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+.settings-nav .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+.settings-section { display: none; }
+.settings-section.active { display: block; }
+
+.section-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    margin-bottom: 20px;
+}
+.section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 4px;
+}
+.section-subtitle {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 24px;
+}
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+@media (max-width: 560px) { .form-row { grid-template-columns: 1fr; } }
+.form-group { margin-bottom: 18px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.form-group input, .form-group select {
+    width: 100%; padding: 10px 14px;
+    border: 1.5px solid #e2e8f0; border-radius: 8px;
+    font-size: 14px; font-family: inherit;
+    transition: border-color .15s, box-shadow .15s;
+    background: #fff;
+}
+.form-group input:focus, .form-group select:focus {
+    outline: none; border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.1);
+}
+.form-group input:disabled, .form-group input[readonly] {
+    background: #f8fafc; color: #94a3b8; cursor: not-allowed;
+}
+.form-hint { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.form-error { font-size: 12px; color: #dc2626; margin-top: 4px; }
+
+.avatar-block {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 20px;
+    background: #f8fafc;
+    border-radius: 10px;
+    margin-bottom: 24px;
+}
+.avatar-circle {
+    width: 64px; height: 64px;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 700; color: #fff;
+    flex-shrink: 0;
+}
+.avatar-info { flex: 1; }
+.avatar-name { font-size: 17px; font-weight: 700; color: #1e293b; }
+.avatar-role {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 600;
+    padding: 3px 10px; border-radius: 12px;
+    margin-top: 4px;
+    background: #dbeafe; color: #1d4ed8;
+}
+
+.password-strength {
+    height: 4px; border-radius: 2px;
+    background: #e2e8f0; margin-top: 8px;
+    overflow: hidden;
+}
+.password-strength-bar {
+    height: 100%; border-radius: 2px;
+    transition: width .3s, background .3s;
+    width: 0;
+}
+.strength-label { font-size: 11px; font-weight: 600; margin-top: 4px; }
+
+.action-bar {
+    display: flex; gap: 10px; align-items: center; margin-top: 8px;
+    padding-top: 20px; border-top: 1px solid #f1f5f9;
+}
+
+.alert {
+    padding: 12px 16px; border-radius: 8px;
+    font-size: 13px; margin-bottom: 18px;
+    display: flex; gap: 8px; align-items: center;
+}
+.alert-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+.alert-error   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
-    <h2>My Profile</h2>
-    <p>Update your personal information.</p>
+    <h2>Account Settings</h2>
+    <p>Manage your profile, password, and preferences.</p>
 </div>
-<div class="card" style="max-width: 600px;">
-    <form method="post">
-        {% csrf_token %}
-        <div class="form-group">
-            <label for="id_first_name">First Name</label>
-            <input type="text" name="first_name" id="id_first_name" value="{{ form.first_name.value|default:'' }}" required>
+
+{% if messages %}
+{% for message in messages %}
+<div class="alert alert-{{ message.tags }}">
+    {% if message.tags == 'success' %}✓{% else %}⚠{% endif %}
+    {{ message }}
+</div>
+{% endfor %}
+{% endif %}
+
+<div class="settings-layout">
+    <!-- Nav -->
+    <nav class="settings-nav">
+        <a href="#" class="active" data-tab="profile">
+            <span class="nav-icon">👤</span> Profile
+        </a>
+        <a href="#" data-tab="password">
+            <span class="nav-icon">🔒</span> Password
+        </a>
+    </nav>
+
+    <!-- Panels -->
+    <div>
+        <!-- VT-22: Edit profile information -->
+        <div class="settings-section active" id="tab-profile">
+            <div class="section-card">
+                <div class="section-title">Personal Information</div>
+                <div class="section-subtitle">Update your name and email address.</div>
+
+                <!-- Avatar block -->
+                <div class="avatar-block">
+                    <div class="avatar-circle">{{ user.first_name|first|upper }}{{ user.last_name|first|upper }}</div>
+                    <div class="avatar-info">
+                        <div class="avatar-name">{{ user.get_full_name|default:user.email }}</div>
+                        <div class="avatar-role">{{ user.get_role_display }}</div>
+                    </div>
+                </div>
+
+                <form method="post" action="{% url 'profile' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="profile">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="id_first_name">First Name</label>
+                            <input type="text" name="first_name" id="id_first_name"
+                                   value="{{ form.first_name.value|default:'' }}" required>
+                            {% if form.first_name.errors %}
+                            <div class="form-error">{{ form.first_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="id_last_name">Last Name</label>
+                            <input type="text" name="last_name" id="id_last_name"
+                                   value="{{ form.last_name.value|default:'' }}" required>
+                            {% if form.last_name.errors %}
+                            <div class="form-error">{{ form.last_name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="id_email">Email Address</label>
+                        <input type="email" name="email" id="id_email"
+                               value="{{ form.email.value|default:'' }}" required>
+                        <div class="form-hint">This is the email you use to log in.</div>
+                        {% if form.email.errors %}
+                        <div class="form-error">{{ form.email.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label>Role</label>
+                        <input type="text" value="{{ user.get_role_display }}" readonly>
+                        <div class="form-hint">Contact your coach to change your role.</div>
+                    </div>
+                    <div class="action-bar">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
         </div>
-        <div class="form-group">
-            <label for="id_last_name">Last Name</label>
-            <input type="text" name="last_name" id="id_last_name" value="{{ form.last_name.value|default:'' }}" required>
+
+        <!-- VT-23: Password change -->
+        <div class="settings-section" id="tab-password">
+            <div class="section-card">
+                <div class="section-title">Change Password</div>
+                <div class="section-subtitle">Choose a strong password you don't use elsewhere.</div>
+
+                {% if pw_errors %}
+                <div class="alert alert-error">
+                    ⚠ {% for e in pw_errors %}{{ e }} {% endfor %}
+                </div>
+                {% endif %}
+
+                <form method="post" action="{% url 'profile' %}" id="pwForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="password">
+                    <div class="form-group">
+                        <label for="id_old_password">Current Password</label>
+                        <input type="password" name="old_password" id="id_old_password" required autocomplete="current-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="id_new_password1">New Password</label>
+                        <input type="password" name="new_password1" id="id_new_password1" required
+                               autocomplete="new-password" oninput="checkStrength(this.value)">
+                        <div class="password-strength">
+                            <div class="password-strength-bar" id="strengthBar"></div>
+                        </div>
+                        <div class="strength-label" id="strengthLabel" style="color:#94a3b8;"></div>
+                        <div class="form-hint">At least 8 characters. Mix letters, numbers, and symbols.</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="id_new_password2">Confirm New Password</label>
+                        <input type="password" name="new_password2" id="id_new_password2" required
+                               autocomplete="new-password" oninput="checkMatch()">
+                        <div class="form-hint" id="matchHint"></div>
+                    </div>
+                    <div class="action-bar">
+                        <button type="submit" class="btn btn-primary">Update Password</button>
+                    </div>
+                </form>
+            </div>
         </div>
-        <div class="form-group">
-            <label for="id_email">Email</label>
-            <input type="email" name="email" id="id_email" value="{{ form.email.value|default:'' }}" required>
-        </div>
-        <div class="form-group">
-            <label>Role</label>
-            <input type="text" value="{{ user.get_role_display }}" disabled style="background: #f8fafc; color: #64748b;">
-        </div>
-        {% if form.errors %}
-        <div style="color: #991b1b; font-size: 13px; margin-bottom: 16px;">
-            {% for field in form %}{% for error in field.errors %}<div>{{ error }}</div>{% endfor %}{% endfor %}
-        </div>
-        {% endif %}
-        <button type="submit" class="btn btn-primary">Save Changes</button>
-    </form>
-    <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-        <a href="{% url 'password_reset' %}" class="btn btn-secondary">Change Password</a>
     </div>
 </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Tab navigation
+document.querySelectorAll('.settings-nav a[data-tab]').forEach(link => {
+    link.addEventListener('click', e => {
+        e.preventDefault();
+        const tab = link.dataset.tab;
+        document.querySelectorAll('.settings-nav a').forEach(a => a.classList.remove('active'));
+        document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
+        link.classList.add('active');
+        document.getElementById('tab-' + tab).classList.add('active');
+    });
+});
+
+// If password errors exist, open password tab on load
+{% if pw_errors %}
+document.querySelector('[data-tab="password"]').click();
+{% endif %}
+
+// Password strength meter
+function checkStrength(val) {
+    const bar = document.getElementById('strengthBar');
+    const label = document.getElementById('strengthLabel');
+    let score = 0;
+    if (val.length >= 8) score++;
+    if (val.length >= 12) score++;
+    if (/[A-Z]/.test(val) && /[a-z]/.test(val)) score++;
+    if (/\d/.test(val)) score++;
+    if (/[^A-Za-z0-9]/.test(val)) score++;
+
+    const levels = [
+        { pct: 0,   color: '#e2e8f0', text: '' },
+        { pct: 20,  color: '#ef4444', text: 'Very weak' },
+        { pct: 40,  color: '#f97316', text: 'Weak' },
+        { pct: 60,  color: '#eab308', text: 'Fair' },
+        { pct: 80,  color: '#22c55e', text: 'Strong' },
+        { pct: 100, color: '#16a34a', text: 'Very strong' },
+    ];
+    const lvl = levels[score] || levels[0];
+    bar.style.width = lvl.pct + '%';
+    bar.style.background = lvl.color;
+    label.textContent = lvl.text;
+    label.style.color = lvl.color;
+}
+
+function checkMatch() {
+    const p1 = document.getElementById('id_new_password1').value;
+    const p2 = document.getElementById('id_new_password2').value;
+    const hint = document.getElementById('matchHint');
+    if (!p2) { hint.textContent = ''; return; }
+    if (p1 === p2) {
+        hint.textContent = '✓ Passwords match';
+        hint.style.color = '#16a34a';
+    } else {
+        hint.textContent = '✗ Passwords do not match';
+        hint.style.color = '#dc2626';
+    }
+}
+</script>
 {% endblock %}

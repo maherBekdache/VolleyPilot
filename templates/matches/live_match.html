@@ -1,0 +1,1131 @@
+{% extends "base.html" %}
+{% block title %}Live: {{ match }} — VolleyPilot{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── High-contrast toggle ──────────────────────────────────────── */
+body.hc { --court-surface: #000; --court-line: #fff; --slot-fill: #1d4ed8; --text-on-court: #fff; }
+
+/* ── Page layout ───────────────────────────────────────────────── */
+.live-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .live-layout { grid-template-columns: 1fr; }
+}
+
+/* ── Scoreboard ─────────────────────────────────────────────────── */
+.live-scoreboard {
+    background: #1e293b;
+    border-radius: 14px;
+    padding: 24px 32px;
+    color: #fff;
+    margin-bottom: 20px;
+}
+.sb-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+.sb-set-badge {
+    font-size: 12px;
+    background: #3b82f6;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-weight: 700;
+    letter-spacing: .5px;
+}
+.sb-sets-record {
+    font-size: 13px;
+    color: #94a3b8;
+}
+.sb-scores {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 16px;
+    align-items: center;
+    text-align: center;
+}
+.sb-team-name { font-size: 15px; color: #94a3b8; margin-bottom: 6px; font-weight: 600; }
+.sb-score { font-size: 72px; font-weight: 800; line-height: 1; color: #fff; }
+.sb-score.serving { color: #3b82f6; }
+.sb-divider { font-size: 28px; color: #475569; }
+.sb-serve-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    margin-top: 8px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+}
+.sb-serve-indicator.serving { background: rgba(59,130,246,.2); color: #93c5fd; }
+.sb-serve-indicator.receiving { background: rgba(100,116,139,.15); color: #94a3b8; }
+.sb-set-history {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,.08);
+}
+.set-chip {
+    background: rgba(255,255,255,.08);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 13px;
+    color: #cbd5e1;
+}
+.set-chip.won { color: #4ade80; }
+.set-chip.lost { color: #f87171; }
+
+/* ── Rotation badge ─────────────────────────────────────────────── */
+.rotation-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.rotation-badge {
+    background: rgba(255,255,255,.1);
+    border-radius: 8px;
+    padding: 5px 14px;
+    font-size: 13px;
+    color: #e2e8f0;
+}
+.rotation-badge strong { color: #fff; font-size: 16px; }
+.btn-rotate {
+    background: rgba(255,255,255,.1);
+    border: none;
+    color: #cbd5e1;
+    border-radius: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background .15s;
+}
+.btn-rotate:hover { background: rgba(255,255,255,.2); }
+
+/* ── Status pills ───────────────────────────────────────────────── */
+.status-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #f1f5f9;
+    color: #475569;
+}
+.status-pill.subs { background: #dbeafe; color: #1d4ed8; }
+.status-pill.timeout { background: #fef3c7; color: #92400e; }
+.status-pill.libero { background: #f0fdf4; color: #166534; }
+.status-pill.libero-out { background: #fff7ed; color: #9a3412; }
+
+/* ── Action grid ─────────────────────────────────────────────────── */
+.action-grid-live {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.action-btn-live {
+    padding: 18px 12px;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    line-height: 1.2;
+}
+.action-btn-live span { font-size: 11px; font-weight: 500; opacity: .75; }
+.btn-point-us {
+    background: #22c55e;
+    color: #fff;
+    border-color: #16a34a;
+}
+.btn-point-us:hover { background: #16a34a; transform: translateY(-1px); }
+.btn-point-them {
+    background: #ef4444;
+    color: #fff;
+    border-color: #dc2626;
+}
+.btn-point-them:hover { background: #dc2626; transform: translateY(-1px); }
+.btn-timeout-live {
+    background: #f59e0b;
+    color: #fff;
+    border-color: #d97706;
+}
+.btn-timeout-live:hover { background: #d97706; }
+.btn-timeout-live:disabled { background: #d1d5db; border-color: #d1d5db; cursor: not-allowed; transform: none; }
+.btn-sub-live {
+    background: #8b5cf6;
+    color: #fff;
+    border-color: #7c3aed;
+}
+.btn-sub-live:hover { background: #7c3aed; }
+.btn-libero-live {
+    background: #0ea5e9;
+    color: #fff;
+    border-color: #0284c7;
+}
+.btn-libero-live:hover { background: #0284c7; }
+
+/* ── Court visualization ─────────────────────────────────────────── */
+.court-wrapper {
+    background: #f8fafc;
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+    position: relative;
+}
+.hc .court-wrapper { background: #111; }
+.court-toolbar {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+}
+.court-btn {
+    background: #e2e8f0;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #475569;
+    transition: background .15s;
+}
+.court-btn:hover { background: #cbd5e1; }
+.court-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748b;
+    text-align: center;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+.hc .court-title { color: #94a3b8; }
+
+.court-svg-wrap {
+    width: 100%;
+    max-width: 280px;
+    margin: 0 auto;
+    display: block;
+}
+.court-svg-wrap svg { width: 100%; height: auto; display: block; }
+
+/* SVG court elements styled by data-attrs */
+.court-surface { fill: #c2832a; }
+.hc .court-surface { fill: #000; }
+.court-line { stroke: #fff; stroke-width: 2; fill: none; }
+.hc .court-line { stroke: #ff0; }
+.court-net { stroke: #fff; stroke-width: 3; }
+.hc .court-net { stroke: #ff0; stroke-width: 4; }
+
+.court-pos-slot {
+    fill: rgba(255,255,255,.18);
+    rx: 6; ry: 6;
+    cursor: pointer;
+    transition: fill .15s;
+}
+.court-pos-slot:hover { fill: rgba(255,255,255,.3); }
+.court-pos-slot.has-player { fill: rgba(59,130,246,.85); }
+.court-pos-slot.is-server { fill: rgba(34,197,94,.85); }
+.court-pos-slot.is-libero { fill: rgba(234,179,8,.85); }
+.hc .court-pos-slot.has-player { fill: #1d4ed8; }
+.hc .court-pos-slot.is-server { fill: #15803d; }
+.hc .court-pos-slot.is-libero { fill: #a16207; }
+
+.court-player-text {
+    fill: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+}
+.court-pos-label {
+    fill: rgba(255,255,255,.6);
+    font-size: 8px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+}
+.hc .court-player-text, .hc .court-pos-label { fill: #fff; }
+
+/* ── Thumbnail court ─────────────────────────────────────────────── */
+.court-thumbnail-wrap {
+    width: 80px;
+    flex-shrink: 0;
+}
+
+/* ── Fullscreen court ────────────────────────────────────────────── */
+.court-fullscreen-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.85);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+.court-fullscreen-overlay.open { display: flex; }
+.court-fullscreen-inner {
+    background: #1e293b;
+    border-radius: 18px;
+    padding: 32px;
+    max-width: 560px;
+    width: 95vw;
+    position: relative;
+}
+.court-fullscreen-inner .court-title { color: #94a3b8; }
+.court-fs-close {
+    position: absolute;
+    top: 14px; right: 18px;
+    background: none; border: none;
+    font-size: 22px; color: #94a3b8;
+    cursor: pointer;
+}
+.court-fs-close:hover { color: #fff; }
+
+/* ── Right panel (sidebar) ───────────────────────────────────────── */
+.live-sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+.panel-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+.panel-card h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 12px;
+}
+
+/* ── Modal ───────────────────────────────────────────────────────── */
+.lm-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    z-index: 1500;
+    align-items: center;
+    justify-content: center;
+}
+.lm-modal.open { display: flex; }
+.lm-modal-box {
+    background: #fff;
+    border-radius: 14px;
+    padding: 28px;
+    max-width: 440px;
+    width: 92vw;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+.lm-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.lm-modal-title { font-size: 20px; font-weight: 700; color: #1e293b; }
+.lm-modal-close {
+    background: none; border: none;
+    font-size: 22px; color: #94a3b8; cursor: pointer;
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+}
+.lm-modal-close:hover { background: #f1f5f9; }
+.lm-form-row { margin-bottom: 16px; }
+.lm-form-row label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+.lm-form-row select, .lm-form-row input {
+    width: 100%; padding: 10px 12px;
+    border: 2px solid #e2e8f0; border-radius: 8px;
+    font-size: 14px; background: #f8fafc;
+}
+.lm-form-row select:focus, .lm-form-row input:focus {
+    outline: none; border-color: #3b82f6; background: #fff;
+}
+.swap-arrow { text-align: center; font-size: 22px; color: #94a3b8; margin: 6px 0; }
+.lm-error { color: #dc2626; font-size: 13px; margin-top: 8px; display: none; }
+.lm-error.show { display: block; }
+.lm-success { color: #16a34a; font-size: 13px; margin-top: 8px; display: none; }
+.lm-success.show { display: block; }
+
+/* ── Toast ───────────────────────────────────────────────────────── */
+.toast-rack {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    z-index: 3000;
+    display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+    background: #1e293b; color: #fff;
+    padding: 12px 18px; border-radius: 10px;
+    font-size: 14px; font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,.25);
+    animation: slideUp .2s ease;
+    max-width: 280px;
+}
+.toast.toast-ok { border-left: 4px solid #22c55e; }
+.toast.toast-err { border-left: 4px solid #ef4444; }
+.toast.toast-info { border-left: 4px solid #3b82f6; }
+@keyframes slideUp { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: none; } }
+
+/* ── Match-over banner ───────────────────────────────────────────── */
+.match-over-banner {
+    display: none;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    color: #fff; border-radius: 14px;
+    padding: 32px; text-align: center;
+    margin-bottom: 20px;
+}
+.match-over-banner.show { display: block; }
+.match-over-banner h2 { font-size: 28px; margin-bottom: 8px; }
+.match-over-banner p { color: #94a3b8; margin-bottom: 18px; }
+
+/* ── Lineup setup modal ──────────────────────────────────────────── */
+.lineup-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.lineup-cell { text-align: center; }
+.lineup-cell label { font-size: 11px; color: #64748b; font-weight: 600; display: block; margin-bottom: 4px; }
+.lineup-cell select { width: 100%; padding: 6px 8px; font-size: 12px; border: 1.5px solid #e2e8f0; border-radius: 6px; }
+
+/* Position arrangement: back row bottom, front row top (volleyball order) */
+.lineup-row-label {
+    font-size: 11px; color: #94a3b8; text-align: center;
+    font-weight: 600; letter-spacing: .4px; margin-bottom: 4px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% if high_contrast %}<script>document.documentElement.className='hc'</script>{% endif %}
+
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+    <div>
+        <h2 style="margin-bottom:4px;">🏐 Live Match</h2>
+        <p>{{ match.team.name }} vs <strong>{{ match.opponent }}</strong> &mdash; {{ match.date|date:"N j, Y" }} &middot; {{ match.location }}</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <a href="{% url 'toggle_high_contrast' match.id %}" class="btn btn-secondary" style="font-size:13px;padding:6px 12px;">
+            {% if high_contrast %}🌗 Normal{% else %}🌑 High Contrast{% endif %}
+        </a>
+        <a href="{% url 'schedule' %}" class="btn btn-secondary" style="font-size:13px;padding:6px 12px;">← Schedule</a>
+    </div>
+</div>
+
+<!-- Match-over banner (shown via JS) -->
+<div class="match-over-banner" id="matchOverBanner">
+    <h2 id="matchOverTitle">Match Complete</h2>
+    <p id="matchOverSub">Final sets: <span id="matchOverSets"></span></p>
+    <a href="{% url 'results' %}" class="btn btn-primary">View Results</a>
+</div>
+
+<!-- VT-54: Scoreboard with set number + score -->
+<div class="live-scoreboard" id="scoreboard">
+    <div class="sb-top">
+        <span class="sb-set-badge" id="setLabel">SET {{ live.current_set }}</span>
+        <span class="sb-sets-record" id="setsRecord">{{ our_sets }} – {{ their_sets }} sets</span>
+    </div>
+    <div class="sb-scores">
+        <div>
+            <div class="sb-team-name">{{ match.team.name }}</div>
+            <div class="sb-score{% if live.our_serve %} serving{% endif %}" id="ourScore">{{ set_score.our_score }}</div>
+            <!-- VT-53: Server indicator -->
+            <div class="sb-serve-indicator{% if live.our_serve %} serving{% else %} receiving{% endif %}" id="ourServeIndicator">
+                {% if live.our_serve %}🏐 Serving{% else %}↩ Receiving{% endif %}
+            </div>
+        </div>
+        <div class="sb-divider">:</div>
+        <div>
+            <div class="sb-team-name">{{ match.opponent }}</div>
+            <div class="sb-score{% if not live.our_serve %} serving{% endif %}" id="theirScore">{{ set_score.opponent_score }}</div>
+            <div class="sb-serve-indicator{% if not live.our_serve %} serving{% else %} receiving{% endif %}" id="theirServeIndicator">
+                {% if not live.our_serve %}🏐 Serving{% else %}↩ Receiving{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Rotation display + manual override (VT-52) -->
+    <div class="rotation-row">
+        {% if user.is_staff_role %}
+        <button class="btn-rotate" onclick="manualRotate('back')" title="Rotate back">◀</button>
+        {% endif %}
+        <span class="rotation-badge">Rotation <strong id="rotationNum">{{ live.current_rotation }}</strong></span>
+        {% if user.is_staff_role %}
+        <button class="btn-rotate" onclick="manualRotate('forward')" title="Rotate forward">▶</button>
+        {% endif %}
+    </div>
+
+    <!-- Past set scores -->
+    {% if all_set_scores %}
+    <div class="sb-set-history">
+        {% for s in all_set_scores %}
+        <span class="set-chip {% if s.our_score > s.opponent_score %}won{% else %}lost{% endif %}">
+            S{{ s.set_number }}: {{ s.our_score }}-{{ s.opponent_score }}
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Status pills row: VT-59, VT-62, VT-63, VT-70 -->
+<div class="status-row">
+    <span class="status-pill subs" id="subsCounter">🔄 Subs left: {{ subs_remaining }}</span>
+    <span class="status-pill timeout" id="timeoutCounter">⏱ Timeouts: {{ timeouts_remaining }}</span>
+    {% if libero_player %}
+    <span class="status-pill libero" id="liberoIndicator">🟡 Libero: #{{ libero_player.jersey_number }} {{ libero_player.name }}</span>
+    {% else %}
+    <span class="status-pill" id="liberoIndicator">No libero set</span>
+    {% endif %}
+    <!-- VT-63: libero return eligibility -->
+    {% if libero_out_ids %}
+    <span class="status-pill libero-out" id="liberoEligibility">↩ Libero can return</span>
+    {% endif %}
+</div>
+
+<!-- Main layout -->
+<div class="live-layout">
+
+    <!-- Left: court + actions -->
+    <div>
+        <!-- VT-64/65/67/68: Court visualization with toolbar -->
+        <div class="court-wrapper" id="courtWrapper">
+            <div class="court-toolbar">
+                <button class="court-btn" onclick="openFullscreenCourt()" title="Fullscreen court">⛶ Fullscreen</button>
+                <button class="court-btn" onclick="openLineupModal()" title="Edit lineup">✏️ Set Lineup</button>
+            </div>
+            <div class="court-title">Our Side — Rotation {{ live.current_rotation }}</div>
+            <!-- VT-68: small thumbnail always visible -->
+            <div class="court-svg-wrap" id="courtSvgWrap">
+                {% include "matches/_court_svg.html" with thumbnail=False %}
+            </div>
+        </div>
+
+        <!-- Action buttons -->
+        {% if user.is_staff_role and live.is_active %}
+        <div class="action-grid-live">
+            <button class="action-btn-live btn-point-us" onclick="recordPoint(true)">
+                +1 Us
+                <span>{{ match.team.name }}</span>
+            </button>
+            <button class="action-btn-live btn-point-them" onclick="recordPoint(false)">
+                +1 Them
+                <span>{{ match.opponent }}</span>
+            </button>
+            <!-- VT-69: Timeout button for coach -->
+            <button class="action-btn-live btn-timeout-live" onclick="callTimeout()" id="timeoutBtn"
+                {% if timeouts_remaining == 0 %}disabled{% endif %}>
+                ⏱ Timeout
+                <span id="timeoutBtnSub">{{ timeouts_remaining }} left</span>
+            </button>
+            <button class="action-btn-live btn-sub-live" onclick="openSubModal()">
+                🔄 Sub
+                <span>{{ subs_remaining }} remaining</span>
+            </button>
+            <button class="action-btn-live btn-libero-live" onclick="openLiberoModal()" style="grid-column:1/-1;">
+                🟡 Libero Swap
+                <span>{% if libero_player %}#{{ libero_player.jersey_number }} {{ libero_player.name }}{% else %}No libero set{% endif %}</span>
+            </button>
+        </div>
+        {% endif %}
+
+        <!-- Log panel -->
+        <div class="panel-card">
+            <h4>Recent Actions</h4>
+            <div id="actionLog" style="font-size:13px;color:#475569;line-height:1.8;max-height:160px;overflow-y:auto;">
+                Tracking started.
+            </div>
+        </div>
+    </div>
+
+    <!-- Right sidebar -->
+    <div class="live-sidebar">
+        <!-- VT-57: Substitution history panel -->
+        <div class="panel-card">
+            <h4>Substitutions — Set {{ live.current_set }}</h4>
+            {% if live.actions.all %}
+            {% for s in live.actions.all %}{% if s.action_type == 'substitution' and s.set_number == live.current_set and not s.is_undone %}
+            <div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+                <span style="color:#7c3aed;">🔄</span>
+                <span>
+                    {% with players|dictsort:"pk" as ps %}
+                    {% if s.data.is_libero_swap %}<em style="color:#0284c7;">[Libero] </em>{% endif %}
+                    In: #{{ s.data.player_in_id }} → Out: #{{ s.data.player_out_id }}
+                    {% endwith %}
+                </span>
+            </div>
+            {% endif %}{% endfor %}
+            {% else %}
+            <p style="font-size:13px;color:#94a3b8;">No substitutions yet.</p>
+            {% endif %}
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+                <span style="color:#64748b;">Used</span>
+                <span style="font-weight:700;color:#1e293b;" id="subsUsedPanel">{{ subs_used }}/6</span>
+            </div>
+        </div>
+
+        <!-- Players on roster -->
+        <div class="panel-card">
+            <h4>Roster</h4>
+            <div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">
+                {% for p in players %}
+                <div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;background:#f8fafc;">
+                    <span style="background:#3b82f6;color:#fff;border-radius:6px;padding:2px 7px;font-size:12px;font-weight:700;">#{{ p.jersey_number }}</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:600;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ p.name }}</div>
+                        <div style="font-size:11px;color:#64748b;">{{ p.position }}</div>
+                    </div>
+                    {% if p.position == 'Libero' %}
+                    <span style="font-size:10px;background:#fef9c3;color:#854d0e;padding:2px 6px;border-radius:10px;font-weight:700;">LIB</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     VT-66: Fullscreen court overlay
+================================================================ -->
+<div class="court-fullscreen-overlay" id="fsCourtOverlay">
+    <div class="court-fullscreen-inner">
+        <button class="court-fs-close" onclick="closeFullscreenCourt()">✕</button>
+        <div class="court-title" id="fsCourTitle">Full Court — Rotation <span id="fsRotNum">{{ live.current_rotation }}</span></div>
+        <div id="fsCourtSvg" style="max-width:480px;margin:0 auto;">
+            {% include "matches/_court_svg.html" with thumbnail=False fullscreen=True %}
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     Substitution modal (VT-57)
+================================================================ -->
+<div class="lm-modal" id="subModal">
+    <div class="lm-modal-box">
+        <div class="lm-modal-header">
+            <span class="lm-modal-title">🔄 Substitution</span>
+            <button class="lm-modal-close" onclick="closeModal('subModal')">✕</button>
+        </div>
+        <div class="lm-form-row">
+            <label>Player Coming IN</label>
+            <select id="subPlayerIn">
+                <option value="">— select player —</option>
+                {% for p in players %}
+                <option value="{{ p.pk }}">#{{ p.jersey_number }} {{ p.name }} ({{ p.position }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="swap-arrow">⇅</div>
+        <div class="lm-form-row">
+            <label>Player Going OUT</label>
+            <select id="subPlayerOut">
+                <option value="">— select player —</option>
+                {% for p in players %}
+                <option value="{{ p.pk }}">#{{ p.jersey_number }} {{ p.name }} ({{ p.position }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="lm-error" id="subError"></div>
+        <div class="lm-success" id="subSuccess"></div>
+        <div style="display:flex;gap:10px;margin-top:18px;">
+            <button class="btn btn-primary" onclick="submitSub()" style="flex:1;">Confirm Sub</button>
+            <button class="btn btn-secondary" onclick="closeModal('subModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     Libero swap modal (VT-60)
+================================================================ -->
+<div class="lm-modal" id="liberoModal">
+    <div class="lm-modal-box">
+        <div class="lm-modal-header">
+            <span class="lm-modal-title">🟡 Libero Swap</span>
+            <button class="lm-modal-close" onclick="closeModal('liberoModal')">✕</button>
+        </div>
+        <div class="lm-form-row">
+            <label>Libero Player</label>
+            <select id="liberoSelect">
+                <option value="">— select libero —</option>
+                {% for p in players %}
+                {% if p.position == 'Libero' %}
+                <option value="{{ p.pk }}" {% if libero_id == p.pk|stringformat:"i" %}selected{% endif %}>#{{ p.jersey_number }} {{ p.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="swap-arrow">⇅</div>
+        <div class="lm-form-row">
+            <label>Player Being Replaced</label>
+            <select id="liberoReplaces">
+                <option value="">— select player —</option>
+                {% for p in players %}
+                {% if p.position != 'Libero' %}
+                <option value="{{ p.pk }}">#{{ p.jersey_number }} {{ p.name }} ({{ p.position }})</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="lm-form-row">
+            <label>Direction</label>
+            <select id="liberoDirection">
+                <option value="in">Libero enters court</option>
+                <option value="out">Libero leaves court</option>
+            </select>
+        </div>
+        <div class="lm-error" id="liberoError"></div>
+        <div class="lm-success" id="liberoSuccess"></div>
+        <div style="display:flex;gap:10px;margin-top:18px;">
+            <button class="btn btn-primary" onclick="submitLiberoSwap()" style="flex:1;">Confirm Swap</button>
+            <button class="btn btn-secondary" onclick="closeModal('liberoModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     Lineup editor modal
+================================================================ -->
+<div class="lm-modal" id="lineupModal">
+    <div class="lm-modal-box" style="max-width:520px;">
+        <div class="lm-modal-header">
+            <span class="lm-modal-title">✏️ Set Lineup</span>
+            <button class="lm-modal-close" onclick="closeModal('lineupModal')">✕</button>
+        </div>
+        <p style="font-size:13px;color:#64748b;margin-bottom:16px;">Positions 1–3 are front row, 4–6 are back row. Position 1 is the server.</p>
+        <div class="lineup-row-label">FRONT ROW (net side)</div>
+        <div class="lineup-grid">
+            <!-- Front row: 4, 3, 2 (left to right from opponent's view) -->
+            {% for pos in "456" %}
+            <div class="lineup-cell">
+                <label>Pos {{ pos }}</label>
+                <select id="lineupPos{{ pos }}">
+                    <option value="">—</option>
+                    {% for p in players %}
+                    <option value="{{ p.pk }}">#{{ p.jersey_number }} {{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="lineup-row-label" style="margin-top:8px;">BACK ROW</div>
+        <div class="lineup-grid">
+            <!-- Back row: 5, 6, 1 -->
+            {% for pos in "123" %}
+            <div class="lineup-cell">
+                <label>Pos {{ pos }}</label>
+                <select id="lineupPos{{ pos }}">
+                    <option value="">—</option>
+                    {% for p in players %}
+                    <option value="{{ p.pk }}">#{{ p.jersey_number }} {{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="lm-error" id="lineupError"></div>
+        <div style="display:flex;gap:10px;margin-top:18px;">
+            <button class="btn btn-primary" onclick="submitLineup()" style="flex:1;">Save Lineup</button>
+            <button class="btn btn-secondary" onclick="closeModal('lineupModal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast rack -->
+<div class="toast-rack" id="toastRack"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const MATCH_ID = {{ match.id }};
+const CSRF = '{{ csrf_token }}';
+const IS_ACTIVE = {{ live.is_active|yesno:"true,false" }};
+
+// ── Toasts ──────────────────────────────────────────────────────────
+function toast(msg, type='ok') {
+    const rack = document.getElementById('toastRack');
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = msg;
+    rack.appendChild(el);
+    setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .4s'; }, 2500);
+    setTimeout(() => el.remove(), 3000);
+}
+
+// ── API helper ───────────────────────────────────────────────────────
+async function api(url, body=null) {
+    const opts = { method: body ? 'POST' : 'GET', headers: {'X-CSRFToken': CSRF} };
+    if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    const r = await fetch(url, opts);
+    return r.json();
+}
+
+// ── Log helper ───────────────────────────────────────────────────────
+function logAction(msg) {
+    const log = document.getElementById('actionLog');
+    const row = document.createElement('div');
+    row.textContent = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + ' — ' + msg;
+    log.prepend(row);
+}
+
+// ── VT-51/52: Record point ──────────────────────────────────────────
+async function recordPoint(us) {
+    const d = await api(`/matches/${MATCH_ID}/point/`, {us});
+    if (!d.ok) { toast(d.error || 'Error', 'err'); return; }
+    updateScoreboard(d);
+    logAction(us ? `+1 Us (${d.our_score}-${d.opponent_score})` : `+1 Them (${d.our_score}-${d.opponent_score})`);
+    updateCourt(d.rotation);
+    if (d.match_over) { showMatchOver(d.our_sets, d.their_sets); }
+    else if (d.set_over) { toast(`Set ${d.current_set - 1} over! Starting set ${d.current_set}`, 'info'); }
+}
+
+function updateScoreboard(d) {
+    document.getElementById('ourScore').textContent = d.our_score;
+    document.getElementById('theirScore').textContent = d.opponent_score;
+    document.getElementById('rotationNum').textContent = d.rotation;
+    document.getElementById('setLabel').textContent = `SET ${d.current_set}`;
+    document.getElementById('setsRecord').textContent = `${d.our_sets} – ${d.their_sets} sets`;
+    document.getElementById('fsRotNum').textContent = d.rotation;
+
+    const ourScore = document.getElementById('ourScore');
+    const theirScore = document.getElementById('theirScore');
+    ourScore.classList.toggle('serving', d.our_serve);
+    theirScore.classList.toggle('serving', !d.our_serve);
+
+    const ourInd = document.getElementById('ourServeIndicator');
+    const theirInd = document.getElementById('theirServeIndicator');
+    ourInd.className = `sb-serve-indicator ${d.our_serve ? 'serving' : 'receiving'}`;
+    ourInd.textContent = d.our_serve ? '🏐 Serving' : '↩ Receiving';
+    theirInd.className = `sb-serve-indicator ${!d.our_serve ? 'serving' : 'receiving'}`;
+    theirInd.textContent = !d.our_serve ? '🏐 Serving' : '↩ Receiving';
+}
+
+// ── VT-52: Manual rotation ───────────────────────────────────────────
+async function manualRotate(direction) {
+    const d = await api(`/matches/${MATCH_ID}/rotate/`, {direction});
+    if (!d.ok) { toast('Rotation failed', 'err'); return; }
+    document.getElementById('rotationNum').textContent = d.rotation;
+    document.getElementById('fsRotNum').textContent = d.rotation;
+    updateCourt(d.rotation);
+    logAction(`Manual rotate ${direction} → Rot ${d.rotation}`);
+    toast(`Rotation ${d.rotation}`, 'info');
+}
+
+// ── VT-69: Timeout ───────────────────────────────────────────────────
+async function callTimeout() {
+    const d = await api(`/matches/${MATCH_ID}/timeout/`, {});
+    if (!d.ok) { toast(d.error || 'No timeouts left', 'err'); return; }
+    const rem = d.timeouts_remaining;
+    document.getElementById('timeoutCounter').textContent = `⏱ Timeouts: ${rem}`;
+    document.getElementById('timeoutBtnSub').textContent = `${rem} left`;
+    if (rem === 0) document.getElementById('timeoutBtn').disabled = true;
+    logAction(`Timeout called (${rem} remaining)`);
+    toast('Timeout called', 'info');
+}
+
+// ── VT-57/58/59: Substitution ────────────────────────────────────────
+function openSubModal() { openModal('subModal'); }
+
+async function submitSub() {
+    const inId = document.getElementById('subPlayerIn').value;
+    const outId = document.getElementById('subPlayerOut').value;
+    const errEl = document.getElementById('subError');
+    const okEl = document.getElementById('subSuccess');
+    errEl.className = 'lm-error'; okEl.className = 'lm-success';
+
+    if (!inId || !outId) { errEl.textContent = 'Select both players.'; errEl.className = 'lm-error show'; return; }
+    if (inId === outId) { errEl.textContent = 'Players must be different.'; errEl.className = 'lm-error show'; return; }
+
+    const d = await api(`/matches/${MATCH_ID}/sub/`, {player_in: inId, player_out: outId, is_libero_swap: false});
+    if (!d.ok) { errEl.textContent = d.error; errEl.className = 'lm-error show'; return; }
+
+    okEl.textContent = 'Substitution recorded!';
+    okEl.className = 'lm-success show';
+    document.getElementById('subsCounter').textContent = `🔄 Subs left: ${d.subs_remaining}`;
+    document.getElementById('subsUsedPanel').textContent = `${6 - d.subs_remaining}/6`;
+    logAction(`Sub: player #${inId} in, player #${outId} out`);
+    toast('Substitution done', 'ok');
+    setTimeout(() => closeModal('subModal'), 800);
+}
+
+// ── VT-60/61/62/63: Libero ───────────────────────────────────────────
+function openLiberoModal() { openModal('liberoModal'); }
+
+async function submitLiberoSwap() {
+    const libId = document.getElementById('liberoSelect').value;
+    const repId = document.getElementById('liberoReplaces').value;
+    const dir = document.getElementById('liberoDirection').value;
+    const errEl = document.getElementById('liberoError');
+    const okEl = document.getElementById('liberoSuccess');
+    errEl.className = 'lm-error'; okEl.className = 'lm-success';
+
+    if (!libId || !repId) { errEl.textContent = 'Select both players.'; errEl.className = 'lm-error show'; return; }
+
+    const d = await api(`/matches/${MATCH_ID}/libero/`, {libero_id: libId, replaced_id: repId, swap_in: dir === 'in'});
+    if (!d.ok) { errEl.textContent = d.error; errEl.className = 'lm-error show'; return; }
+
+    okEl.textContent = 'Libero swap recorded!';
+    okEl.className = 'lm-success show';
+    logAction(`Libero swap: libero #${libId} ${dir}, replaced #${repId}`);
+    toast('Libero swap done', 'ok');
+    setTimeout(() => closeModal('liberoModal'), 800);
+}
+
+// ── Lineup ───────────────────────────────────────────────────────────
+function openLineupModal() { openModal('lineupModal'); }
+
+async function submitLineup() {
+    const positions = {};
+    for (let i = 1; i <= 6; i++) {
+        const v = document.getElementById(`lineupPos${i}`).value;
+        if (v) positions[i] = v;
+    }
+    const d = await api(`/matches/${MATCH_ID}/lineup/`, {positions});
+    if (!d.ok) {
+        document.getElementById('lineupError').textContent = 'Error saving.';
+        document.getElementById('lineupError').className = 'lm-error show';
+        return;
+    }
+    toast('Lineup saved', 'ok');
+    closeModal('lineupModal');
+    // Rebuild court SVG with new data
+    refreshCourtFromLineup(positions);
+}
+
+// ── Court visualization ──────────────────────────────────────────────
+
+// Position layout coords in SVG (x,y,w,h) for a 200x360 viewBox
+// Volleyball positions: 1=back-right serve, going counter-clockwise
+// Front row: 4(left), 3(middle), 2(right) — Back row: 5(left), 6(middle), 1(right)
+const COURT_POSITIONS = {
+    1: { x: 140, y: 260 },  // back right
+    2: { x: 140, y: 60 },   // front right
+    3: { x: 100, y: 60 },   // front middle
+    4: { x: 60,  y: 60 },   // front left
+    5: { x: 60,  y: 260 },  // back left
+    6: { x: 100, y: 260 },  // back middle
+};
+
+const playerMap = {};  // pos -> {name, jersey, position}
+{% for pos, player in position_players.items %}
+playerMap[{{ pos }}] = { name: "{{ player.name|escapejs }}", jersey: "{{ player.jersey_number }}", position: "{{ player.position|escapejs }}", id: {{ player.pk }} };
+{% endfor %}
+
+const LIBERO_ID = {{ libero_id|default:"null" }};
+let currentRotation = {{ live.current_rotation }};
+
+function buildCourtSVG(container, rotation) {
+    const W = 200, H = 360;
+    const svgNS = 'http://www.w3.org/2000/svg';
+
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.style.width = '100%';
+    svg.style.height = 'auto';
+
+    // Court surface
+    const bg = document.createElementNS(svgNS, 'rect');
+    bg.setAttribute('width', W); bg.setAttribute('height', H);
+    bg.setAttribute('class', 'court-surface');
+    svg.appendChild(bg);
+
+    // Net
+    const net = document.createElementNS(svgNS, 'line');
+    net.setAttribute('x1', 0); net.setAttribute('y1', H/2);
+    net.setAttribute('x2', W); net.setAttribute('y2', H/2);
+    net.setAttribute('class', 'court-net');
+    svg.appendChild(net);
+
+    // 3m attack line
+    const atk = document.createElementNS(svgNS, 'line');
+    atk.setAttribute('x1', 0); atk.setAttribute('y1', H/2 + 60);
+    atk.setAttribute('x2', W); atk.setAttribute('y2', H/2 + 60);
+    atk.setAttribute('class', 'court-line');
+    svg.appendChild(atk);
+
+    // Sidelines
+    for (const x of [4, W-4]) {
+        const sl = document.createElementNS(svgNS, 'line');
+        sl.setAttribute('x1', x); sl.setAttribute('y1', 0);
+        sl.setAttribute('x2', x); sl.setAttribute('y2', H);
+        sl.setAttribute('class', 'court-line');
+        svg.appendChild(sl);
+    }
+
+    // Opponent side (top half) — simple shading
+    const opp = document.createElementNS(svgNS, 'rect');
+    opp.setAttribute('x', 4); opp.setAttribute('y', 0);
+    opp.setAttribute('width', W-8); opp.setAttribute('height', H/2 - 2);
+    opp.setAttribute('fill', 'rgba(0,0,0,.15)');
+    svg.appendChild(opp);
+
+    const oppLabel = document.createElementNS(svgNS, 'text');
+    oppLabel.setAttribute('x', W/2); oppLabel.setAttribute('y', H/2 - 12);
+    oppLabel.setAttribute('class', 'court-pos-label');
+    oppLabel.setAttribute('font-size', '10');
+    oppLabel.textContent = 'OPPONENTS';
+    svg.appendChild(oppLabel);
+
+    // Our side label
+    const ourLabel = document.createElementNS(svgNS, 'text');
+    ourLabel.setAttribute('x', W/2); ourLabel.setAttribute('y', H - 10);
+    ourLabel.setAttribute('class', 'court-pos-label');
+    ourLabel.setAttribute('font-size', '9');
+    ourLabel.textContent = 'ROT ' + rotation;
+    svg.appendChild(ourLabel);
+
+    // Server dot
+    const serverPos = rotation; // position 1 = server slot after rotation
+    // Draw position slots (our side only: bottom half)
+    for (const [posStr, coords] of Object.entries(COURT_POSITIONS)) {
+        const pos = parseInt(posStr);
+        const cx = coords.x, cy = coords.y;
+        const bw = 48, bh = 36;
+
+        const isServer = (pos === 1);
+        const player = playerMap[pos];
+        const isLibero = player && player.id === LIBERO_ID;
+
+        const rect = document.createElementNS(svgNS, 'rect');
+        rect.setAttribute('x', cx - bw/2); rect.setAttribute('y', cy - bh/2);
+        rect.setAttribute('width', bw); rect.setAttribute('height', bh);
+        rect.setAttribute('rx', 6); rect.setAttribute('ry', 6);
+        let cls = 'court-pos-slot';
+        if (player) cls += isLibero ? ' is-libero' : ' has-player';
+        if (isServer) cls += ' is-server';
+        rect.setAttribute('class', cls);
+        svg.appendChild(rect);
+
+        // Position number label (small, top-left of slot)
+        const posLabel = document.createElementNS(svgNS, 'text');
+        posLabel.setAttribute('x', cx - bw/2 + 5);
+        posLabel.setAttribute('y', cy - bh/2 + 9);
+        posLabel.setAttribute('class', 'court-pos-label');
+        posLabel.setAttribute('font-size', '8');
+        posLabel.textContent = pos;
+        if (isServer) posLabel.textContent += '★';
+        svg.appendChild(posLabel);
+
+        if (player) {
+            const jerseyText = document.createElementNS(svgNS, 'text');
+            jerseyText.setAttribute('x', cx); jerseyText.setAttribute('y', cy - 5);
+            jerseyText.setAttribute('class', 'court-player-text');
+            jerseyText.setAttribute('font-size', '10');
+            jerseyText.textContent = '#' + player.jersey;
+            svg.appendChild(jerseyText);
+
+            const nameText = document.createElementNS(svgNS, 'text');
+            nameText.setAttribute('x', cx); nameText.setAttribute('y', cy + 9);
+            nameText.setAttribute('class', 'court-player-text');
+            nameText.setAttribute('font-size', '8');
+            // Truncate name
+            const n = player.name.split(' ')[0].substring(0, 8);
+            nameText.textContent = n;
+            svg.appendChild(nameText);
+        } else {
+            const emptyTxt = document.createElementNS(svgNS, 'text');
+            emptyTxt.setAttribute('x', cx); emptyTxt.setAttribute('y', cy + 4);
+            emptyTxt.setAttribute('class', 'court-pos-label');
+            emptyTxt.setAttribute('font-size', '9');
+            emptyTxt.textContent = `P${pos}`;
+            svg.appendChild(emptyTxt);
+        }
+    }
+
+    container.innerHTML = '';
+    container.appendChild(svg);
+}
+
+function updateCourt(rotation) {
+    currentRotation = rotation;
+    buildCourtSVG(document.getElementById('courtSvgWrap'), rotation);
+    buildCourtSVG(document.getElementById('fsCourtSvg'), rotation);
+}
+
+function refreshCourtFromLineup(positions) {
+    for (const [pos, pid] of Object.entries(positions)) {
+        // We don't have player data client-side easily, so just re-render with known data
+    }
+    buildCourtSVG(document.getElementById('courtSvgWrap'), currentRotation);
+    buildCourtSVG(document.getElementById('fsCourtSvg'), currentRotation);
+}
+
+// VT-66: Fullscreen court
+function openFullscreenCourt() {
+    document.getElementById('fsCourtOverlay').className = 'court-fullscreen-overlay open';
+    buildCourtSVG(document.getElementById('fsCourtSvg'), currentRotation);
+}
+function closeFullscreenCourt() {
+    document.getElementById('fsCourtOverlay').className = 'court-fullscreen-overlay';
+}
+
+// ── Modal helpers ────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).className = 'lm-modal open'; }
+function closeModal(id) {
+    document.getElementById(id).className = 'lm-modal';
+    ['subError','subSuccess','liberoError','liberoSuccess','lineupError'].forEach(e => {
+        const el = document.getElementById(e);
+        if (el) el.className = el.className.replace(' show','').replace('show','').trim();
+    });
+}
+// Close modals on backdrop click
+document.querySelectorAll('.lm-modal').forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
+});
+
+// ── Match over ───────────────────────────────────────────────────────
+function showMatchOver(ourSets, theirSets) {
+    const banner = document.getElementById('matchOverBanner');
+    banner.className = 'match-over-banner show';
+    const won = ourSets > theirSets;
+    document.getElementById('matchOverTitle').textContent = won ? '🏆 Match Won!' : 'Match Lost';
+    document.getElementById('matchOverSets').textContent = `${ourSets} – ${theirSets}`;
+    toast(won ? 'Match won! 🏆' : 'Match ended', won ? 'ok' : 'info');
+}
+
+// ── Init ─────────────────────────────────────────────────────────────
+buildCourtSVG(document.getElementById('courtSvgWrap'), currentRotation);
+buildCourtSVG(document.getElementById('fsCourtSvg'), currentRotation);
+
+{% if not live.is_active %}
+document.getElementById('matchOverBanner').className = 'match-over-banner show';
+document.getElementById('matchOverTitle').textContent = 'Match Complete';
+document.getElementById('matchOverSets').textContent = '{{ our_sets }} – {{ their_sets }}';
+{% endif %}
+</script>
+{% endblock %}
