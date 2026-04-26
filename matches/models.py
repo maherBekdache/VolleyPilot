@@ -10,6 +10,13 @@ class LiveMatch(models.Model):
     lineup = models.JSONField(default=dict, blank=True)
     bench = models.JSONField(default=list, blank=True)
     first_server = models.PositiveIntegerField(default=1)
+    libero_player = models.ForeignKey(
+        'teams.Player',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='libero_assignments',
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
 
@@ -36,6 +43,7 @@ class Action(models.Model):
     ACTION_TYPES = [
         ('point_won', 'Point Won'),
         ('point_lost', 'Point Lost'),
+        ('sideout', 'Sideout'),
         ('substitution', 'Substitution'),
         ('timeout', 'Timeout'),
         ('rotation', 'Rotation'),
@@ -76,3 +84,17 @@ class ActionTag(models.Model):
 
     def __str__(self):
         return f"{self.tag_type} by {self.player}"
+
+
+class PlayerParticipation(models.Model):
+    live_match = models.ForeignKey(LiveMatch, on_delete=models.CASCADE, related_name='participation_records')
+    player = models.ForeignKey('teams.Player', on_delete=models.CASCADE, related_name='participation_records')
+    seconds_played = models.PositiveIntegerField(default=0)
+    currently_on_court = models.BooleanField(default=False)
+    stint_started_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ['live_match', 'player']
+
+    def __str__(self):
+        return f"{self.player} in {self.live_match}"

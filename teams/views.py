@@ -2,6 +2,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Count
+from django.core.mail import send_mail
+from django.urls import reverse
 from .models import Team, Player, TeamInvitation, TeamMembership
 from .forms import TeamForm, PlayerForm, TeamInvitationForm
 from accounts.models import User
@@ -193,11 +195,25 @@ def invite_view(request):
             invite = form.save(commit=False)
             invite.team = team
             invite.save()
-            messages.success(request, f'Invitation sent to {invite.email}')
+            accept_url = request.build_absolute_uri(reverse('accept_invite', args=[invite.token]))
+            send_mail(
+                subject=f"You're invited to join {team.name} on VolleyPilot",
+                message=(
+                    f"Hello,\n\n{request.user.get_full_name() or request.user.email} invited you to join "
+                    f"{team.name} as {invite.get_role_display()}.\n\n"
+                    f"Use this link to accept or decline the invitation:\n{accept_url}\n"
+                ),
+                from_email=None,
+                recipient_list=[invite.email],
+                fail_silently=True,
+            )
+            messages.success(request, f'Invitation created for {invite.email}. Share this link if needed: {accept_url}')
             return redirect('roster')
     else:
         form = TeamInvitationForm()
     pending_invites = TeamInvitation.objects.filter(team=team).order_by('-created_at')[:20]
+    for invite in pending_invites:
+        invite.accept_url = request.build_absolute_uri(reverse('accept_invite', args=[invite.token]))
     return render(request, 'teams/invite_form.html', {'form': form, 'team': team, 'pending_invites': pending_invites})
 
 
@@ -205,8 +221,13 @@ def accept_invite_view(request, token):
     invite = get_object_or_404(TeamInvitation, token=token, status='pending')
     if not request.user.is_authenticated:
         messages.info(request, 'Please log in or register to accept the invitation.')
-        return redirect(f'/accounts/login/?next=/teams/invite/{token}/accept/')
+        next_url = reverse('accept_invite', args=[token])
+        return redirect(f'/accounts/login/?next={next_url}')
+    email_matches = request.user.email.lower() == invite.email.lower()
     if request.method == 'POST':
+        if not email_matches:
+            messages.error(request, f'This invitation is for {invite.email}. Please sign in with that account first.')
+            return redirect('dashboard')
         action = request.POST.get('action')
         if action == 'accept':
             TeamMembership.objects.get_or_create(
@@ -223,4 +244,4 @@ def accept_invite_view(request, token):
             invite.save()
             messages.info(request, 'Invitation declined.')
         return redirect('dashboard')
-    return render(request, 'teams/accept_invite.html', {'invite': invite})
+    return render(request, 'teams/accept_invite.html', {'invite': invite, 'email_matches': email_matches})

@@ -92,7 +92,10 @@ function applyStatsFilters() {
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h3>Player Statistics</h3>
         {% if user.is_staff_role %}
-        <a href="{% url 'export_stats_csv' %}" class="btn btn-secondary" style="font-size: 13px;">📥 Export CSV</a>
+        <div style="display:flex;gap:8px;">
+            <a href="{% url 'export_stats_csv' %}" class="btn btn-secondary" style="font-size: 13px;">Export CSV</a>
+            <a href="{% url 'export_stats_pdf' %}" class="btn btn-secondary" style="font-size: 13px;">Export PDF</a>
+        </div>
         {% endif %}
     </div>
     <table class="stats-table">

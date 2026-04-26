@@ -3,22 +3,22 @@
 {% block content %}
 <div class="page-header">
     <h2>Start Match Setup</h2>
-    <p>{{ team.name }} vs {{ match.opponent }} · {{ match.date|date:"M j, Y" }} · {{ match.get_ruleset_display }}</p>
+    <p>{{ team.name }} vs {{ match.opponent }} - {{ match.date|date:"M j, Y" }} - {{ match.get_ruleset_display }}</p>
 </div>
 
 <form method="post" class="dashboard-grid">
     {% csrf_token %}
     <div class="card">
         <h3>Starting Lineup</h3>
-        <p style="color:#64748b;margin-bottom:16px;">Assign players to positions 1–6. Position 1 is the initial server spot.</p>
+        <p style="color:#64748b;margin-bottom:16px;">Assign players to positions 1-6. Position 1 is the initial server spot.</p>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;">
             {% for pos in '123456' %}
             <div class="form-group">
                 <label>Position {{ pos }}</label>
-                <select name="position_{{ pos }}" required>
+                <select name="position_{{ pos }}" id="position_{{ pos }}" required>
                     <option value="">Select player</option>
                     {% for p in players %}
-                    <option value="{{ p.pk }}" {% if selected_lineup.pos == p.pk %}selected{% endif %}>#{{ p.jersey_number }} {{ p.name }} — {{ p.position }}</option>
+                    <option value="{{ p.pk }}">#{{ p.jersey_number }} {{ p.name }} - {{ p.position }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -32,6 +32,17 @@
                 <option value="{{ n }}" {% if first_server|stringformat:'s' == n %}selected{% endif %}>Position {{ n }}</option>
                 {% endfor %}
             </select>
+        </div>
+
+        <div class="form-group" style="margin-top:16px;">
+            <label>Assigned Libero</label>
+            <select name="libero_player" id="libero_player">
+                <option value="">No libero assigned</option>
+                {% for p in players %}
+                <option value="{{ p.pk }}" {% if selected_libero == p.pk %}selected{% endif %}>#{{ p.jersey_number }} {{ p.name }}</option>
+                {% endfor %}
+            </select>
+            <div style="font-size:13px;color:#64748b;margin-top:8px;">You can still run the match without a libero. Assign one now if you want libero swaps tracked separately.</div>
         </div>
 
         <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -61,10 +72,21 @@
                 <div style="padding:10px;border-radius:10px;background:#e0f2fe;">Pos 2</div>
                 <div style="padding:10px;border-radius:10px;background:#dcfce7;">Pos 5</div>
                 <div style="padding:10px;border-radius:10px;background:#dcfce7;">Pos 6</div>
-                <div style="padding:10px;border-radius:10px;background:#fef3c7;">Pos 1 ★</div>
+                <div style="padding:10px;border-radius:10px;background:#fef3c7;">Pos 1 *</div>
             </div>
             <div style="font-size:13px;color:#64748b;margin-top:10px;">The bottom-right slot is the serving position when the match begins.</div>
         </div>
     </div>
 </form>
+
+{{ selected_lineup|json_script:"selected-lineup" }}
+<script>
+const selectedLineup = JSON.parse(document.getElementById('selected-lineup').textContent || '{}');
+for (const [position, playerId] of Object.entries(selectedLineup)) {
+  const select = document.getElementById(`position_${position}`);
+  if (select) {
+    select.value = String(playerId);
+  }
+}
+</script>
 {% endblock %}

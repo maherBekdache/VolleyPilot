@@ -42,6 +42,12 @@ class Player(models.Model):
 
 
 class TeamInvitation(models.Model):
+    ROLE_CHOICES = [
+        ('coach', 'Coach'),
+        ('assistant', 'Assistant Coach'),
+        ('manager', 'Manager'),
+        ('parent', 'Parent'),
+    ]
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('accepted', 'Accepted'),
@@ -56,6 +62,9 @@ class TeamInvitation(models.Model):
 
     def __str__(self):
         return f"Invite {self.email} to {self.team.name}"
+
+    def get_role_display(self):
+        return dict(self.ROLE_CHOICES).get(self.role, self.role.title())
 
 
 class TeamMembership(models.Model):

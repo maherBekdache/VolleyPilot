@@ -1,4 +1,5 @@
 import json
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import models
@@ -10,7 +11,7 @@ from django.views.decorators.http import require_POST
 from schedule.models import Match
 from teams.models import Player
 from teams.views import get_user_team
-from .models import Action, ActionTag, LiveMatch, SetScore
+from .models import Action, ActionTag, LiveMatch, PlayerParticipation, SetScore
 
 TECHNICAL_TIMEOUT_POINTS = (8, 16)
 
@@ -27,6 +28,10 @@ def _get_live(match_id):
     match = get_object_or_404(Match, pk=match_id)
     live = get_object_or_404(LiveMatch, match=match)
     return match, live
+
+
+def _team_players(live):
+    return list(live.match.team.players.filter(is_active=True).order_by('jersey_number'))
 
 
 def _current_set_score(live):
@@ -71,6 +76,63 @@ def _player_lookup(players):
     return {p.pk: p for p in players}
 
 
+def _ensure_participation_records(live, players):
+    for player in players:
+        PlayerParticipation.objects.get_or_create(live_match=live, player=player)
+
+
+def _sync_participation(live, players=None, timestamp=None):
+    players = players or _team_players(live)
+    _ensure_participation_records(live, players)
+    timestamp = timestamp or timezone.now()
+    active_ids = {int(pid) for pid in (live.lineup or {}).values()}
+    for record in live.participation_records.select_related('player'):
+        should_be_on_court = live.is_active and record.player_id in active_ids
+        if should_be_on_court and not record.currently_on_court:
+            record.currently_on_court = True
+            record.stint_started_at = timestamp
+            record.save(update_fields=['currently_on_court', 'stint_started_at'])
+        elif not should_be_on_court and record.currently_on_court:
+            if record.stint_started_at:
+                delta = max(0, int((timestamp - record.stint_started_at).total_seconds()))
+                record.seconds_played += delta
+            record.currently_on_court = False
+            record.stint_started_at = None
+            record.save(update_fields=['seconds_played', 'currently_on_court', 'stint_started_at'])
+
+
+def _participation_totals(live, players):
+    _ensure_participation_records(live, players)
+    now = timezone.now()
+    rows = []
+    lookup = _player_lookup(players)
+    for record in live.participation_records.select_related('player'):
+        seconds_played = record.seconds_played
+        if record.currently_on_court and record.stint_started_at:
+            seconds_played += max(0, int((now - record.stint_started_at).total_seconds()))
+        rows.append({
+            'player': lookup.get(record.player_id, record.player),
+            'seconds_played': seconds_played,
+            'minutes_played': round(seconds_played / 60, 1),
+        })
+    return sorted(rows, key=lambda item: item['seconds_played'], reverse=True)
+
+
+def _participation_payload(rows):
+    return [
+        {
+            'player': {
+                'pk': row['player'].pk,
+                'name': row['player'].name,
+                'jersey_number': row['player'].jersey_number,
+            },
+            'minutes_played': row['minutes_played'],
+            'seconds_played': row['seconds_played'],
+        }
+        for row in rows
+    ]
+
+
 def _lineup_players(live, players):
     lookup = _player_lookup(players)
     result = {}
@@ -91,15 +153,75 @@ def _bench_players(live, players):
     return result
 
 
+def _live_rotation_stats(live):
+    actions = list(
+        live.actions.filter(
+            is_undone=False,
+            action_type__in=['point_won', 'point_lost', 'sideout'],
+        ).order_by('timestamp')
+    )
+    overall_sideout_won = 0
+    overall_sideout_chances = 0
+    by_rotation = []
+    for rotation in range(1, 7):
+        rotation_actions = [action for action in actions if action.rotation == rotation]
+        won = sum(1 for action in rotation_actions if action.action_type in ('point_won', 'sideout'))
+        lost = sum(1 for action in rotation_actions if action.action_type == 'point_lost')
+        sideout_won = sum(
+            1 for action in rotation_actions if not action.data.get('our_serve', True) and action.action_type in ('point_won', 'sideout')
+        )
+        sideout_chances = sum(1 for action in rotation_actions if not action.data.get('our_serve', True))
+        overall_sideout_won += sideout_won
+        overall_sideout_chances += sideout_chances
+        by_rotation.append({
+            'rotation': rotation,
+            'won': won,
+            'lost': lost,
+            'net': won - lost,
+            'sideout_pct': round(sideout_won / sideout_chances * 100) if sideout_chances else 0,
+        })
+    return {
+        'by_rotation': by_rotation,
+        'overall_sideout_pct': round(overall_sideout_won / overall_sideout_chances * 100) if overall_sideout_chances else 0,
+    }
+
+
+def _run_stats(live):
+    actions = list(
+        live.actions.filter(
+            is_undone=False,
+            action_type__in=['point_won', 'point_lost', 'sideout'],
+        ).order_by('timestamp')
+    )
+    current_run = 0
+    longest_run = 0
+    for action in actions:
+        if action.action_type in ('point_won', 'sideout'):
+            current_run += 1
+            longest_run = max(longest_run, current_run)
+        else:
+            current_run = 0
+    return {'current_run': current_run, 'longest_run': longest_run}
+
+
+def _latest_point_action(live):
+    return live.actions.filter(
+        is_undone=False,
+        action_type__in=['point_won', 'point_lost', 'sideout'],
+    ).order_by('-timestamp').first()
+
+
 def _get_action_label(action, players):
     lookup = _player_lookup(players)
     data = action.data or {}
     if action.action_type == 'match_start':
-        return f"Match started · server position {data.get('first_server', 1)}"
+        return f"Match started - server position {data.get('first_server', 1)}"
     if action.action_type == 'point_won':
-        return f"Point VolleyPilot · {data.get('our_score', 0)}-{data.get('opponent_score', 0)}"
+        return f"Point VolleyPilot - {data.get('our_score', 0)}-{data.get('opponent_score', 0)}"
     if action.action_type == 'point_lost':
-        return f"Point Opponent · {data.get('our_score', 0)}-{data.get('opponent_score', 0)}"
+        return f"Point Opponent - {data.get('our_score', 0)}-{data.get('opponent_score', 0)}"
+    if action.action_type == 'sideout':
+        return f"Sideout won - {data.get('our_score', 0)}-{data.get('opponent_score', 0)}"
     if action.action_type == 'timeout':
         return 'Coach timeout called'
     if action.action_type == 'technical_timeout':
@@ -109,17 +231,18 @@ def _get_action_label(action, players):
     if action.action_type == 'lineup':
         return 'Lineup updated'
     if action.action_type == 'substitution':
-        p_in = lookup.get(int(data.get('player_in_id', 0)))
-        p_out = lookup.get(int(data.get('player_out_id', 0)))
+        player_in = lookup.get(int(data.get('player_in_id', 0)))
+        player_out = lookup.get(int(data.get('player_out_id', 0)))
         if data.get('is_libero_swap'):
-            return f"Libero swap · {p_in or data.get('player_in_id')} for {p_out or data.get('player_out_id')}"
-        return f"Substitution · {p_in or data.get('player_in_id')} in for {p_out or data.get('player_out_id')}"
+            return f"Libero swap - {player_in or data.get('player_in_id')} for {player_out or data.get('player_out_id')}"
+        return f"Substitution - {player_in or data.get('player_in_id')} in for {player_out or data.get('player_out_id')}"
     if action.action_type == 'undo':
-        return f"Undo · {data.get('target_action_type', 'action')}"
+        return f"Undo - {data.get('target_action_type', 'action')}"
     return action.get_action_type_display()
 
 
 def _build_context(live, team, players):
+    _sync_participation(live, players)
     set_score = _current_set_score(live)
     all_set_scores = live.set_scores.filter(is_complete=True)
     our_sets, their_sets = _sets_won(live)
@@ -130,18 +253,24 @@ def _build_context(live, team, players):
     technical_timeouts = _get_technical_timeouts(live)
     actions = live.actions.filter(is_undone=False).order_by('-timestamp')[:25]
     action_log = [
-        {
-            'timestamp': a.timestamp,
-            'label': _get_action_label(a, players),
-            'set_number': a.set_number,
-        }
-        for a in actions
+        {'timestamp': action.timestamp, 'label': _get_action_label(action, players), 'set_number': action.set_number}
+        for action in actions
     ]
+    participation_totals = _participation_totals(live, players)
     return {
         'match': live.match,
         'live': live,
         'team': team,
         'players': players,
+        'players_json': [
+            {
+                'pk': player.pk,
+                'name': player.name,
+                'jersey_number': player.jersey_number,
+                'position': player.position,
+            }
+            for player in players
+        ],
         'set_score': set_score,
         'our_sets': our_sets,
         'their_sets': their_sets,
@@ -152,6 +281,11 @@ def _build_context(live, team, players):
         'timeouts_remaining': timeouts_remaining,
         'technical_timeouts': technical_timeouts,
         'action_log': action_log,
+        'rotation_metrics': _live_rotation_stats(live),
+        'run_stats': _run_stats(live),
+        'participation_totals': participation_totals[:6],
+        'libero_player': live.libero_player,
+        'tag_choices': ActionTag.TAG_CHOICES,
         'lineup_json': json.dumps(live.lineup or {}),
         'bench_json': json.dumps(live.bench or []),
     }
@@ -167,8 +301,9 @@ def start_match(request, match_id):
     players = list(team.players.filter(is_active=True).order_by('jersey_number'))
     if request.method == 'POST':
         lineup = {str(i): request.POST.get(f'position_{i}') for i in range(1, 7)}
-        lineup = {k: int(v) for k, v in lineup.items() if v}
+        lineup = {key: int(value) for key, value in lineup.items() if value}
         first_server = int(request.POST.get('first_server', '1') or '1')
+        libero_id = request.POST.get('libero_player') or ''
         if len(lineup) != 6 or len(set(lineup.values())) != 6:
             messages.error(request, 'Choose 6 unique starters for positions 1-6.')
             return render(request, 'matches/match_startup.html', {
@@ -178,8 +313,15 @@ def start_match(request, match_id):
                 'selected_lineup': lineup,
                 'selected_bench': request.POST.getlist('bench'),
                 'first_server': first_server,
+                'selected_libero': libero_id,
             })
         bench = [int(pid) for pid in request.POST.getlist('bench') if pid and int(pid) not in lineup.values()]
+        libero_player = None
+        if libero_id:
+            libero_player = next((player for player in players if player.pk == int(libero_id)), None)
+            if not libero_player:
+                messages.error(request, 'Choose a valid libero from your roster.')
+                return redirect('start_match', match_id=match.id)
         live, _ = LiveMatch.objects.get_or_create(match=match)
         live.current_set = 1
         live.is_active = True
@@ -188,22 +330,35 @@ def start_match(request, match_id):
         live.lineup = lineup
         live.bench = bench
         live.first_server = first_server
+        live.libero_player = libero_player
         live.ended_at = None
         live.save()
+        _ensure_participation_records(live, players)
+        _sync_participation(live, players, timestamp=live.started_at)
         SetScore.objects.get_or_create(live_match=live, set_number=1)
         Action.objects.create(
             live_match=live,
             action_type='match_start',
             set_number=1,
             rotation=first_server,
-            data={'lineup': lineup, 'bench': bench, 'first_server': first_server},
+            data={
+                'lineup': lineup,
+                'bench': bench,
+                'first_server': first_server,
+                'libero_player_id': libero_player.pk if libero_player else None,
+            },
         )
         Action.objects.create(
             live_match=live,
             action_type='lineup',
             set_number=1,
             rotation=first_server,
-            data={'positions': lineup},
+            data={
+                'positions': lineup,
+                'bench': bench,
+                'first_server': first_server,
+                'libero_player_id': libero_player.pk if libero_player else None,
+            },
         )
         messages.success(request, 'Match started.')
         return redirect('live_match', match_id=match.id)
@@ -216,6 +371,7 @@ def start_match(request, match_id):
         'selected_lineup': getattr(existing, 'lineup', {}) if existing else {},
         'selected_bench': getattr(existing, 'bench', []) if existing else [],
         'first_server': getattr(existing, 'first_server', 1) if existing else 1,
+        'selected_libero': getattr(existing, 'libero_player_id', None) if existing else None,
     })
 
 
@@ -241,22 +397,35 @@ def set_lineup(request, match_id):
         return JsonResponse({'ok': False, 'error': 'Permission denied.'}, status=403)
     live = match.live
     data = json.loads(request.body)
-    positions = {str(k): int(v) for k, v in data.get('positions', {}).items() if v}
+    positions = {str(key): int(value) for key, value in data.get('positions', {}).items() if value}
     if len(positions) != 6 or len(set(positions.values())) != 6:
         return JsonResponse({'ok': False, 'error': 'Choose 6 unique players.'}, status=400)
     bench = [int(pid) for pid in data.get('bench', []) if int(pid) not in positions.values()]
+    libero_player = None
+    libero_id = data.get('libero_player')
+    if libero_id:
+        libero_player = Player.objects.filter(pk=int(libero_id), team=team, is_active=True).first()
+        if not libero_player:
+            return JsonResponse({'ok': False, 'error': 'Choose a valid libero.'}, status=400)
     live.lineup = positions
     live.bench = bench
     if data.get('first_server'):
         live.first_server = int(data['first_server'])
         live.current_rotation = int(data['first_server'])
+    live.libero_player = libero_player
     live.save()
+    _sync_participation(live, timestamp=timezone.now())
     Action.objects.create(
         live_match=live,
         action_type='lineup',
         set_number=live.current_set,
         rotation=live.current_rotation,
-        data={'positions': positions, 'bench': bench, 'first_server': live.first_server},
+        data={
+            'positions': positions,
+            'bench': bench,
+            'first_server': live.first_server,
+            'libero_player_id': libero_player.pk if libero_player else None,
+        },
     )
     return JsonResponse({'ok': True})
 
@@ -270,6 +439,7 @@ def record_point(request, match_id):
     live = match.live
     data = json.loads(request.body)
     us = bool(data.get('us', True))
+    mode = data.get('mode', 'point')
     set_score = _current_set_score(live)
 
     before = {
@@ -282,7 +452,7 @@ def record_point(request, match_id):
 
     if us:
         set_score.our_score += 1
-        action_type = 'point_won'
+        action_type = 'sideout' if mode == 'sideout' and not live.our_serve else 'point_won'
         if not live.our_serve:
             live.current_rotation = _rotation_after_sideout(live.current_rotation)
             live.our_serve = True
@@ -352,6 +522,7 @@ def _start_new_set(live):
 
 
 def _end_match(live):
+    _sync_participation(live, timestamp=timezone.now())
     live.is_active = False
     live.ended_at = timezone.now()
     live.save()
@@ -369,7 +540,10 @@ def manual_rotate(request, match_id):
     data = json.loads(request.body)
     direction = data.get('direction', 'forward')
     previous = live.current_rotation
-    live.current_rotation = _rotation_after_sideout(live.current_rotation) if direction == 'forward' else ((live.current_rotation - 2) % 6) + 1
+    if direction == 'forward':
+        live.current_rotation = _rotation_after_sideout(live.current_rotation)
+    else:
+        live.current_rotation = ((live.current_rotation - 2) % 6) + 1
     live.save()
     Action.objects.create(
         live_match=live,
@@ -391,9 +565,10 @@ def make_substitution(request, match_id):
     data = json.loads(request.body)
     player_in_id = data.get('player_in')
     player_out_id = data.get('player_out')
+    is_libero_swap = bool(data.get('is_libero_swap'))
     if not player_in_id or not player_out_id or str(player_in_id) == str(player_out_id):
         return JsonResponse({'ok': False, 'error': 'Choose two different players.'}, status=400)
-    if _regular_subs(live) >= 6:
+    if not is_libero_swap and _regular_subs(live) >= 6:
         return JsonResponse({'ok': False, 'error': 'Substitution limit reached for this set.'}, status=400)
 
     lineup = live.lineup or {}
@@ -401,18 +576,32 @@ def make_substitution(request, match_id):
     out_position = next((pos for pos, pid in lineup.items() if int(pid) == int(player_out_id)), None)
     if not out_position:
         return JsonResponse({'ok': False, 'error': 'Outgoing player must be on the court.'}, status=400)
+    if int(player_in_id) not in bench:
+        return JsonResponse({'ok': False, 'error': 'Incoming player must come from the bench.'}, status=400)
+    if is_libero_swap:
+        if not live.libero_player_id:
+            return JsonResponse({'ok': False, 'error': 'Assign a libero before recording libero swaps.'}, status=400)
+        if int(player_in_id) != live.libero_player_id and int(player_out_id) != live.libero_player_id:
+            return JsonResponse({'ok': False, 'error': 'One side of a libero swap must be the assigned libero.'}, status=400)
+
     lineup[str(out_position)] = int(player_in_id)
     bench.discard(int(player_in_id))
     bench.add(int(player_out_id))
     live.lineup = lineup
     live.bench = sorted(bench)
     live.save()
+    _sync_participation(live, timestamp=timezone.now())
     Action.objects.create(
         live_match=live,
         action_type='substitution',
         set_number=live.current_set,
         rotation=live.current_rotation,
-        data={'player_in_id': player_in_id, 'player_out_id': player_out_id, 'position': out_position},
+        data={
+            'player_in_id': player_in_id,
+            'player_out_id': player_out_id,
+            'position': out_position,
+            'is_libero_swap': is_libero_swap,
+        },
     )
     return JsonResponse({'ok': True, 'subs_remaining': max(0, 6 - _regular_subs(live))})
 
@@ -427,7 +616,13 @@ def call_timeout(request, match_id):
     used, remaining = _get_timeouts(live)
     if remaining <= 0:
         return JsonResponse({'ok': False, 'error': 'No timeouts remaining.'}, status=400)
-    Action.objects.create(live_match=live, action_type='timeout', set_number=live.current_set, rotation=live.current_rotation, data={})
+    Action.objects.create(
+        live_match=live,
+        action_type='timeout',
+        set_number=live.current_set,
+        rotation=live.current_rotation,
+        data={},
+    )
     return JsonResponse({'ok': True, 'timeouts_remaining': remaining - 1})
 
 
@@ -442,9 +637,9 @@ def undo_last_action(request, match_id):
     if not last:
         return JsonResponse({'ok': False, 'error': 'Nothing to undo.'}, status=400)
 
-    if last.action_type in ('point_won', 'point_lost'):
+    if last.action_type in ('point_won', 'point_lost', 'sideout'):
         set_score = SetScore.objects.get(live_match=live, set_number=last.set_number)
-        set_score.our_score = last.data.get('our_score', set_score.our_score) - (1 if last.action_type == 'point_won' else 0)
+        set_score.our_score = last.data.get('our_score', set_score.our_score) - (1 if last.action_type in ('point_won', 'sideout') else 0)
         set_score.opponent_score = last.data.get('opponent_score', set_score.opponent_score) - (1 if last.action_type == 'point_lost' else 0)
         set_score.our_score = max(0, set_score.our_score)
         set_score.opponent_score = max(0, set_score.opponent_score)
@@ -462,8 +657,6 @@ def undo_last_action(request, match_id):
     elif last.action_type == 'rotation':
         live.current_rotation = last.data.get('previous_rotation', live.current_rotation)
         live.save()
-    elif last.action_type == 'timeout':
-        pass
     elif last.action_type == 'substitution':
         lineup = live.lineup or {}
         bench = set(int(pid) for pid in live.bench or [])
@@ -476,14 +669,19 @@ def undo_last_action(request, match_id):
         live.lineup = lineup
         live.bench = sorted(bench)
         live.save()
+        _sync_participation(live, timestamp=timezone.now())
     elif last.action_type == 'lineup':
         previous = live.actions.filter(action_type='lineup', is_undone=False, timestamp__lt=last.timestamp).order_by('-timestamp').first()
         if previous:
             live.lineup = previous.data.get('positions', live.lineup)
             live.bench = previous.data.get('bench', live.bench)
             live.first_server = previous.data.get('first_server', live.first_server)
+            previous_libero = previous.data.get('libero_player_id')
+            live.libero_player = Player.objects.filter(pk=previous_libero, team=live.match.team).first() if previous_libero else None
             live.current_rotation = live.first_server
             live.save()
+            _sync_participation(live, timestamp=timezone.now())
+
     last.is_undone = True
     last.save(update_fields=['is_undone'])
     Action.objects.create(
@@ -502,10 +700,33 @@ def match_state(request, match_id):
     return JsonResponse(_state_payload(live, include_events=True))
 
 
+@require_POST
+@login_required
+def tag_last_point(request, match_id):
+    team, match = _require_team_match(request, match_id)
+    if not team or not request.user.is_staff_role:
+        return JsonResponse({'ok': False, 'error': 'Permission denied.'}, status=403)
+    live = match.live
+    latest_action = _latest_point_action(live)
+    if not latest_action:
+        return JsonResponse({'ok': False, 'error': 'Record a rally before tagging it.'}, status=400)
+    data = json.loads(request.body)
+    tag_type = data.get('tag_type')
+    player_id = data.get('player_id')
+    if tag_type not in dict(ActionTag.TAG_CHOICES):
+        return JsonResponse({'ok': False, 'error': 'Choose a valid tag.'}, status=400)
+    player = Player.objects.filter(pk=player_id, team=team, is_active=True).first() if player_id else None
+    ActionTag.objects.create(action=latest_action, tag_type=tag_type, player=player)
+    return JsonResponse({'ok': True, 'label': f"{tag_type.replace('_', ' ').title()} tagged"})
+
+
 def _state_payload(live, include_events=False, set_over=False, match_over=False):
+    players = _team_players(live)
+    _sync_participation(live, players)
     set_score = _current_set_score(live)
     our_sets, their_sets = _sets_won(live)
     _, timeouts_remaining = _get_timeouts(live)
+    participation_rows = _participation_totals(live, players)
     payload = {
         'ok': True,
         'our_score': set_score.our_score,
@@ -522,12 +743,16 @@ def _state_payload(live, include_events=False, set_over=False, match_over=False)
         'lineup': live.lineup,
         'bench': live.bench,
         'first_server': live.first_server,
+        'libero_player_id': live.libero_player_id,
+        'rotation_metrics': _live_rotation_stats(live),
+        'run_stats': _run_stats(live),
+        'participation_totals': _participation_payload(participation_rows[:6]),
         'set_over': set_over,
         'match_over': match_over,
     }
     if include_events:
         payload['events'] = [
-            {'label': a.get_action_type_display(), 'timestamp': a.timestamp.strftime('%H:%M:%S')}
-            for a in live.actions.filter(is_undone=False).order_by('-timestamp')[:10]
+            {'label': _get_action_label(action, players), 'timestamp': action.timestamp.strftime('%H:%M:%S')}
+            for action in live.actions.filter(is_undone=False).order_by('-timestamp')[:10]
         ]
     return payload
