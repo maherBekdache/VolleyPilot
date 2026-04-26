@@ -129,6 +129,22 @@
             {% endfor %}
         </div>
     </div>
+
+    <div class="card">
+        <h3>Team Performance Snapshot</h3>
+        {% if strongest_rotation %}
+        <div style="margin-bottom:12px;color:#64748b;">Strongest rotation so far: <strong style="color:#1e293b;">Rotation {{ strongest_rotation.rotation }}</strong> at {{ strongest_rotation.pct }}%</div>
+        {% endif %}
+        <div style="display:flex;flex-direction:column;gap:8px;">
+            {% for row in rotation_summary %}
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fafc;border-radius:10px;">
+                <strong>Rotation {{ row.rotation }}</strong>
+                <span>{{ row.won }} won / {{ row.lost }} lost</span>
+                <span>{{ row.pct }}%</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
 </div>
 
 <script>

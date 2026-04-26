@@ -13,6 +13,10 @@ def schedule_view(request):
     if not team and not request.user.is_fan_role:
         return redirect('team_create')
     today = timezone.now().date()
+    player_profile = None
+    if team and request.user.is_player_role:
+        from teams.models import Player
+        player_profile = Player.objects.filter(team=team, user=request.user).first()
     if request.user.is_fan_role:
         matches = Match.objects.all()
         practices = Practice.objects.none()
@@ -21,23 +25,35 @@ def schedule_view(request):
         practices = team.practices.all()
     events = []
     for m in matches:
+        availability_request = m.availability_requests.order_by('-sent_at').first()
+        response = None
+        if availability_request and player_profile:
+            response = availability_request.responses.filter(player=player_profile).first()
         prefix = f"{m.team.name} " if request.user.is_fan_role else ""
         events.append({
             'type': 'game', 'id': m.id, 'date': m.date, 'time': m.time,
             'title': f"{prefix}{m.display_title}: {'vs' if m.is_home else '@'} {m.opponent}",
             'location': m.location, 'is_home': m.is_home, 'status': m.status,
-            'avail_request': m.availability_requests.exists(),
+            'avail_request': bool(availability_request),
+            'avail_request_id': availability_request.id if availability_request else None,
+            'availability_response': response,
             'past': m.date < today,
             'ruleset': m.get_ruleset_display(),
             'can_start': (not request.user.is_fan_role and request.user.is_staff_role and m.status == 'scheduled'),
             'has_live': hasattr(m, 'live'),
         })
     for p in practices:
+        availability_request = p.availability_requests.order_by('-sent_at').first()
+        response = None
+        if availability_request and player_profile:
+            response = availability_request.responses.filter(player=player_profile).first()
         events.append({
             'type': 'practice', 'id': p.id, 'date': p.date, 'time': p.time,
             'title': f"Practice: {p.focus}",
             'location': p.location, 'status': p.status,
-            'avail_request': p.availability_requests.exists(),
+            'avail_request': bool(availability_request),
+            'avail_request_id': availability_request.id if availability_request else None,
+            'availability_response': response,
             'past': p.date < today,
         })
     events.sort(key=lambda e: (e['date'], e['time']))
@@ -161,24 +177,32 @@ def request_availability_view(request, event_type, pk):
         return redirect('schedule')
     if event_type == 'match':
         event = get_object_or_404(Match, pk=pk, team=team)
-        avail_req = AvailabilityRequest.objects.create(
-            event_type='match', match=event, sent_by=request.user
+        avail_req, created = AvailabilityRequest.objects.get_or_create(
+            event_type='match', match=event,
+            defaults={'sent_by': request.user}
         )
     else:
         event = get_object_or_404(Practice, pk=pk, team=team)
-        avail_req = AvailabilityRequest.objects.create(
-            event_type='practice', practice=event, sent_by=request.user
+        avail_req, created = AvailabilityRequest.objects.get_or_create(
+            event_type='practice', practice=event,
+            defaults={'sent_by': request.user}
         )
     players = team.players.filter(is_active=True)
     for player in players:
         AvailabilityResponse.objects.get_or_create(request=avail_req, player=player)
-    messages.success(request, 'Availability request sent to all players.')
+    if created:
+        messages.success(request, 'Availability request sent to all players.')
+    else:
+        messages.info(request, 'Availability request was already created for this event.')
     return redirect('schedule')
 
 
 @login_required
 def availability_respond_view(request, pk):
     response = get_object_or_404(AvailabilityResponse, pk=pk)
+    if response.player.user_id != request.user.id:
+        messages.error(request, 'You can only update your own availability response.')
+        return redirect('schedule')
     if request.method == 'POST':
         status = request.POST.get('status')
         if status in ('available', 'unavailable', 'maybe'):

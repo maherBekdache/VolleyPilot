@@ -36,13 +36,18 @@
             <div class="timeline-date">
                 {{ event.time|time:"g:i A" }}
                 {% if event.type == 'game' %}
-                    <span class="badge {% if event.is_home %}badge-home{% else %}badge-away{% endif %}" style="margin-left: 8px;">{% if event.is_home %}🏠 Home{% else %}✈️ Away{% endif %}</span>
+                    <span class="badge {% if event.is_home %}badge-home{% else %}badge-away{% endif %}" style="margin-left: 8px;">{% if event.is_home %}Home{% else %}Away{% endif %}</span>
                     <span class="badge" style="margin-left:8px;background:#eff6ff;color:#1d4ed8;">{{ event.ruleset }}</span>
                 {% else %}
-                    <span class="badge badge-practice" style="margin-left: 8px;">🏐 Practice</span>
+                    <span class="badge badge-practice" style="margin-left: 8px;">Practice</span>
                 {% endif %}
                 {% if event.status == 'cancelled' %}<span class="badge badge-danger" style="margin-left: 8px;">Cancelled</span>{% endif %}
                 {% if event.past and event.status != 'cancelled' %}<span class="badge" style="margin-left: 8px; background:#f1f5f9; color:#94a3b8;">Completed</span>{% endif %}
+                {% if event.availability_response %}
+                    <span class="badge" style="margin-left:8px;background:#f8fafc;color:#475569;">Availability: {{ event.availability_response.get_status_display }}</span>
+                {% elif event.avail_request and user.is_player_role %}
+                    <span class="badge" style="margin-left:8px;background:#fff7ed;color:#9a3412;">Availability requested</span>
+                {% endif %}
             </div>
             <div class="timeline-title">{{ event.title }}</div>
             <div class="timeline-details">
@@ -52,15 +57,28 @@
                     {% if event.type == 'game' %}
                         <a href="{% url 'match_edit' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Edit</a>
                         {% if event.status != 'cancelled' %}<a href="{% url 'match_cancel' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Cancel</a>{% endif %}
+                        <a href="{% url 'request_availability' 'match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Request Availability</a>
+                        {% if event.avail_request %}<a href="{% url 'availability_summary' 'match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Availability Summary</a>{% endif %}
                         {% if event.status == 'scheduled' %}
-                            <a href="{% url 'start_match' event.id %}" class="btn btn-primary" style="font-size: 13px; padding: 4px 12px;">🏐 Start Match Setup</a>
+                            <a href="{% url 'start_match' event.id %}" class="btn btn-primary" style="font-size: 13px; padding: 4px 12px;">Start Match Setup</a>
                         {% elif event.has_live %}
-                            <a href="{% url 'live_match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">📊 Open Live Match</a>
+                            <a href="{% url 'live_match' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Open Live Match</a>
                         {% endif %}
                     {% else %}
                         <a href="{% url 'practice_edit' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Edit</a>
                         <a href="{% url 'practice_detail' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Drills</a>
+                        <a href="{% url 'request_availability' 'practice' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Request Availability</a>
+                        {% if event.avail_request %}<a href="{% url 'availability_summary' 'practice' event.id %}" class="btn btn-secondary" style="font-size: 13px; padding: 4px 12px;">Availability Summary</a>{% endif %}
                     {% endif %}
+                </div>
+                {% elif user.is_player_role and event.availability_response %}
+                <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <form method="post" action="{% url 'availability_respond' event.availability_response.pk %}" style="display:flex;gap:8px;flex-wrap:wrap;">
+                        {% csrf_token %}
+                        <button type="submit" name="status" value="available" class="btn btn-secondary" style="font-size:13px;padding:4px 12px;">Available</button>
+                        <button type="submit" name="status" value="maybe" class="btn btn-secondary" style="font-size:13px;padding:4px 12px;">Maybe</button>
+                        <button type="submit" name="status" value="unavailable" class="btn btn-secondary" style="font-size:13px;padding:4px 12px;">Unavailable</button>
+                    </form>
                 </div>
                 {% elif event.type == 'game' and event.has_live %}
                 <div style="margin-top:12px;">

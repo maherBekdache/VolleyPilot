@@ -9,6 +9,7 @@ from .models import User
 def register_view(request):
     if request.user.is_authenticated:
         return redirect('dashboard')
+    next_url = request.GET.get('next') or request.POST.get('next') or ''
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
@@ -25,10 +26,12 @@ def register_view(request):
                 )
             login(request, user)
             messages.success(request, 'Account created successfully!')
+            if next_url:
+                return redirect(next_url)
             return redirect('dashboard')
     else:
-        form = RegistrationForm()
-    return render(request, 'accounts/register.html', {'form': form})
+        form = RegistrationForm(initial={'email': request.GET.get('email', '')})
+    return render(request, 'accounts/register.html', {'form': form, 'next_url': next_url})
 
 
 @login_required

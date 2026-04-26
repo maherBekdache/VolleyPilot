@@ -11,4 +11,5 @@ urlpatterns = [
     path('<int:match_id>/timeout/', views.call_timeout, name='call_timeout'),
     path('<int:match_id>/lineup/', views.set_lineup, name='set_lineup'),
     path('<int:match_id>/undo/', views.undo_last_action, name='undo_last_action'),
+    path('<int:match_id>/tag/', views.tag_last_point, name='tag_last_point'),
 ]

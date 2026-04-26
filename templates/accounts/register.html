@@ -4,6 +4,7 @@
 <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 24px; color: #1e293b;">Create Account</h2>
 <form method="post">
     {% csrf_token %}
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
             <label for="id_first_name">First Name</label>

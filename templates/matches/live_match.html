@@ -3,21 +3,22 @@
 {% block content %}
 <div class="page-header" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;">
     <div>
-        <h2>🏐 Live Match</h2>
-        <p>{{ team.name }} vs {{ match.opponent }} · {{ match.display_title }} · {{ match.get_ruleset_display }}</p>
+        <h2>Live Match</h2>
+        <p>{{ team.name }} vs {{ match.opponent }} - {{ match.display_title }} - {{ match.get_ruleset_display }}</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <a href="{% url 'schedule' %}" class="btn btn-secondary">Back to Schedule</a>
+        <button type="button" class="btn btn-secondary" onclick="openFullscreenCourt()">Fullscreen Court</button>
         {% if user.is_staff_role and live.is_active %}
-        <button type="button" class="btn btn-secondary" onclick="undoLastAction()">↩ Undo Last Action</button>
+        <button type="button" class="btn btn-secondary" onclick="undoLastAction()">Undo Last Action</button>
         {% endif %}
     </div>
 </div>
 
-<div class="dashboard-grid" style="grid-template-columns:1.25fr .9fr;align-items:start;">
+<div class="dashboard-grid" style="grid-template-columns:1.35fr .95fr;align-items:start;">
     <div>
         <div class="card" style="background:#0f172a;color:#fff;margin-bottom:20px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
                 <div>
                     <div style="font-size:13px;color:#93c5fd;">SET {{ live.current_set }}</div>
                     <div style="font-size:44px;font-weight:800;"><span id="ourScore">{{ set_score.our_score }}</span> - <span id="theirScore">{{ set_score.opponent_score }}</span></div>
@@ -33,6 +34,7 @@
                 <span class="badge" style="background:#d97706;color:#fff;" id="timeoutsVal">Timeouts left: {{ timeouts_remaining }}</span>
                 <span class="badge" style="background:#7c3aed;color:#fff;" id="subsVal">Subs left: {{ subs_remaining }}</span>
                 <span class="badge" style="background:#059669;color:#fff;" id="techVal">Technical TOs: {{ technical_timeouts }}</span>
+                <span class="badge" style="background:#334155;color:#fff;">Libero: <span id="liberoName">{% if libero_player %}#{{ libero_player.jersey_number }} {{ libero_player.name }}{% else %}Not assigned{% endif %}</span></span>
             </div>
             {% if all_set_scores %}
             <div style="margin-top:14px;color:#cbd5e1;font-size:13px;">Completed sets:
@@ -49,15 +51,13 @@
             <div id="courtGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
                 {% for pos in '456123' %}
                 <div class="court-cell" data-pos="{{ pos }}" style="background:{% if pos == '1' %}#fef3c7{% elif pos in '456' %}#dbeafe{% else %}#dcfce7{% endif %};border:1px solid #dbeafe;border-radius:12px;padding:16px;min-height:92px;display:flex;flex-direction:column;justify-content:center;">
-                    <div style="font-size:12px;color:#64748b;">Position {{ pos }}{% if pos == '1' %} ★{% endif %}</div>
-                    {% if position_players|default:'' %}
+                    <div style="font-size:12px;color:#64748b;">Position {{ pos }}{% if pos == '1' %} *{% endif %}</div>
                     {% for key, player in position_players.items %}
                         {% if key|stringformat:'s' == pos %}
                         <div style="font-weight:700;">#{{ player.jersey_number }} {{ player.name }}</div>
                         <div style="font-size:13px;color:#475569;">{{ player.position }}</div>
                         {% endif %}
                     {% endfor %}
-                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -75,10 +75,32 @@
             <h3>Live Controls</h3>
             <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
                 <button type="button" class="btn btn-success" style="padding:16px;" onclick="recordPoint(true)">+ Point Our Team</button>
+                <button type="button" class="btn btn-success" style="padding:16px;" onclick="recordPoint(true, 'sideout')">+ Sideout</button>
                 <button type="button" class="btn btn-danger" style="padding:16px;" onclick="recordPoint(false)">+ Point Opponent</button>
-                <button type="button" class="btn btn-primary" style="padding:16px;" onclick="callTimeout()">Technical / Coach Timeout Tracker</button>
-                <button type="button" class="btn btn-secondary" style="padding:16px;" onclick="openSubModal()">Bench Substitution</button>
+                <button type="button" class="btn btn-primary" style="padding:16px;" onclick="callTimeout()">Coach Timeout</button>
+                <button type="button" class="btn btn-secondary" style="padding:16px;" onclick="openSubModal()">Bench / Libero Swap</button>
             </div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;">
+            <h3>Tag Last Rally</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;">
+                <div class="form-group" style="margin:0;">
+                    <label>Player</label>
+                    <select id="tag_player">
+                        <option value="">Team event / no player</option>
+                        {% for p in players %}<option value="{{ p.pk }}">#{{ p.jersey_number }} {{ p.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label>Tag</label>
+                    <select id="tag_type">
+                        {% for value, label in tag_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <button class="btn btn-primary" type="button" onclick="tagLastPoint()">Add Tag</button>
+            </div>
+            <div id="tagFeedback" style="font-size:13px;color:#64748b;margin-top:10px;"></div>
         </div>
         {% endif %}
 
@@ -88,7 +110,7 @@
                 {% for entry in action_log %}
                 <div style="padding:12px;border:1px solid #e2e8f0;border-radius:10px;">
                     <div style="font-weight:600;">{{ entry.label }}</div>
-                    <div style="font-size:12px;color:#64748b;">{{ entry.timestamp|date:"g:i:s A" }} · Set {{ entry.set_number }}</div>
+                    <div style="font-size:12px;color:#64748b;">{{ entry.timestamp|date:"g:i:s A" }} - Set {{ entry.set_number }}</div>
                 </div>
                 {% empty %}
                 <div style="color:#64748b;">No events yet.</div>
@@ -99,6 +121,62 @@
 
     <div style="display:flex;flex-direction:column;gap:20px;">
         <div class="card">
+            <h3>Live Rotation Stats</h3>
+            <div style="display:flex;justify-content:space-between;margin-bottom:12px;">
+                <span style="color:#64748b;">Overall sideout percentage</span>
+                <strong id="overallSideoutPct">{{ rotation_metrics.overall_sideout_pct }}%</strong>
+            </div>
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Rotation</th>
+                        <th>Won</th>
+                        <th>Lost</th>
+                        <th>Sideout %</th>
+                    </tr>
+                </thead>
+                <tbody id="rotationStatsBody">
+                    {% for row in rotation_metrics.by_rotation %}
+                    <tr>
+                        <td>R{{ row.rotation }}</td>
+                        <td>{{ row.won }}</td>
+                        <td>{{ row.lost }}</td>
+                        <td>{{ row.sideout_pct }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h3>Momentum</h3>
+            <div style="display:flex;justify-content:space-between;gap:10px;">
+                <div>
+                    <div style="font-size:13px;color:#64748b;">Current scoring run</div>
+                    <div id="currentRun" style="font-size:28px;font-weight:700;">{{ run_stats.current_run }}</div>
+                </div>
+                <div>
+                    <div style="font-size:13px;color:#64748b;">Longest run</div>
+                    <div id="longestRun" style="font-size:28px;font-weight:700;">{{ run_stats.longest_run }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Participation Time</h3>
+            <div id="participationList" style="display:flex;flex-direction:column;gap:8px;">
+                {% for row in participation_totals %}
+                <div style="padding:10px 12px;background:#f8fafc;border-radius:10px;display:flex;justify-content:space-between;gap:8px;">
+                    <strong>#{{ row.player.jersey_number }} {{ row.player.name }}</strong>
+                    <span>{{ row.minutes_played }} min</span>
+                </div>
+                {% empty %}
+                <div style="color:#64748b;">Participation will appear once the match begins.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
             <h3>Bench Players</h3>
             <div style="display:flex;flex-direction:column;gap:8px;">
                 {% for p in bench_players %}
@@ -108,21 +186,6 @@
                 </div>
                 {% empty %}
                 <div style="color:#64748b;">No bench players selected.</div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="card">
-            <h3>Full Roster</h3>
-            <div style="display:flex;flex-direction:column;gap:8px;max-height:460px;overflow:auto;">
-                {% for p in players %}
-                <div style="padding:10px 12px;background:#f8fafc;border-radius:10px;display:flex;justify-content:space-between;gap:8px;align-items:center;">
-                    <div>
-                        <strong>#{{ p.jersey_number }} {{ p.name }}</strong>
-                        <div style="font-size:13px;color:#64748b;">{{ p.position }}</div>
-                    </div>
-                    <a href="{% url 'player_profile' p.pk %}" class="btn btn-secondary" style="padding:6px 10px;font-size:12px;">Profile</a>
-                </div>
                 {% endfor %}
             </div>
         </div>
@@ -155,6 +218,15 @@
               {% for n in '123456' %}<option value="{{ n }}" {% if live.first_server|stringformat:'s' == n %}selected{% endif %}>Position {{ n }}</option>{% endfor %}
           </select>
       </div>
+      <div class="form-group" style="margin-top:8px;">
+          <label>Assigned Libero</label>
+          <select id="lineup_libero">
+              <option value="">No libero assigned</option>
+              {% for p in players %}
+              <option value="{{ p.pk }}" {% if libero_player and libero_player.pk == p.pk %}selected{% endif %}>#{{ p.jersey_number }} {{ p.name }}</option>
+              {% endfor %}
+          </select>
+      </div>
       <div class="form-group">
           <label>Bench</label>
           <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
@@ -173,7 +245,7 @@
 </div>
 
 <div id="subModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);align-items:center;justify-content:center;z-index:1000;">
-  <div class="card" style="width:min(480px,92vw);">
+  <div class="card" style="width:min(520px,92vw);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <h3>Bench Substitution</h3>
           <button class="btn btn-secondary" type="button" onclick="closeSubModal()">Close</button>
@@ -186,35 +258,109 @@
           <label>Player going out</label>
           <select id="sub_out">{% for p in players %}<option value="{{ p.pk }}">#{{ p.jersey_number }} {{ p.name }}</option>{% endfor %}</select>
       </div>
-      <button class="btn btn-primary" type="button" onclick="submitSub()">Confirm Substitution</button>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <input type="checkbox" id="is_libero_swap">
+          Record as libero swap
+      </label>
+      <button class="btn btn-primary" type="button" onclick="submitSub()">Confirm Change</button>
   </div>
 </div>
 {% endif %}
+
+<div id="fullscreenCourt" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.9);z-index:1200;align-items:center;justify-content:center;padding:24px;">
+    <div class="card" style="width:min(900px,100%);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="margin:0;">Fullscreen Court View</h3>
+            <button class="btn btn-secondary" type="button" onclick="closeFullscreenCourt()">Close</button>
+        </div>
+        <div id="fullscreenCourtGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;"></div>
+    </div>
+</div>
+
+{{ lineup_json|json_script:"lineup-json" }}
+{{ bench_json|json_script:"bench-json" }}
+{{ players_json|json_script:"players-json" }}
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
 const MATCH_ID = {{ match.id }};
 const CSRF = '{{ csrf_token }}';
-let lineupState = JSON.parse('{{ lineup_json|escapejs }}');
-let benchState = JSON.parse('{{ bench_json|escapejs }}');
+let lineupState = JSON.parse(document.getElementById('lineup-json').textContent || '{}');
+let benchState = JSON.parse(document.getElementById('bench-json').textContent || '[]');
+const players = JSON.parse(document.getElementById('players-json').textContent || '[]');
+const playerMap = Object.fromEntries(players.map(player => [String(player.pk), player]));
 
-async function api(url, body=null){
-  const opts = {method: body ? 'POST' : 'GET', headers: {'X-CSRFToken': CSRF}};
-  if(body){ opts.headers['Content-Type']='application/json'; opts.body = JSON.stringify(body); }
-  const r = await fetch(url, opts);
-  return await r.json();
+async function api(url, body = null) {
+  const opts = { method: body ? 'POST' : 'GET', headers: { 'X-CSRFToken': CSRF } };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const response = await fetch(url, opts);
+  return await response.json();
 }
 
-function appendLog(label){
-  const box = document.getElementById('eventLog');
-  const row = document.createElement('div');
-  row.style.cssText = 'padding:12px;border:1px solid #e2e8f0;border-radius:10px;';
-  row.innerHTML = `<div style="font-weight:600;">${label}</div><div style="font-size:12px;color:#64748b;">${new Date().toLocaleTimeString()}</div>`;
-  box.prepend(row);
+function renderCourt(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const order = ['4', '5', '6', '3', '2', '1'];
+  container.innerHTML = '';
+  for (const pos of order) {
+    const player = playerMap[String(lineupState[pos] || '')];
+    const card = document.createElement('div');
+    card.style.cssText = `background:${pos === '1' ? '#fef3c7' : ['4','5','6'].includes(pos) ? '#dbeafe' : '#dcfce7'};border:1px solid #dbeafe;border-radius:12px;padding:16px;min-height:92px;display:flex;flex-direction:column;justify-content:center;`;
+    card.innerHTML = `
+      <div style="font-size:12px;color:#64748b;">Position ${pos}${pos === '1' ? ' *' : ''}</div>
+      <div style="font-weight:700;">${player ? `#${player.jersey_number} ${player.name}` : 'Open slot'}</div>
+      <div style="font-size:13px;color:#475569;">${player ? player.position : ''}</div>
+    `;
+    container.appendChild(card);
+  }
 }
 
-function updateState(data){
+function renderEvents(events) {
+  if (!events) return;
+  const eventLog = document.getElementById('eventLog');
+  eventLog.innerHTML = '';
+  if (!events.length) {
+    eventLog.innerHTML = '<div style="color:#64748b;">No events yet.</div>';
+    return;
+  }
+  for (const entry of events) {
+    const row = document.createElement('div');
+    row.style.cssText = 'padding:12px;border:1px solid #e2e8f0;border-radius:10px;';
+    row.innerHTML = `<div style="font-weight:600;">${entry.label}</div><div style="font-size:12px;color:#64748b;">${entry.timestamp}</div>`;
+    eventLog.appendChild(row);
+  }
+}
+
+function renderRotationStats(metrics) {
+  if (!metrics) return;
+  document.getElementById('overallSideoutPct').textContent = `${metrics.overall_sideout_pct}%`;
+  const body = document.getElementById('rotationStatsBody');
+  body.innerHTML = '';
+  for (const row of metrics.by_rotation) {
+    body.innerHTML += `<tr><td>R${row.rotation}</td><td>${row.won}</td><td>${row.lost}</td><td>${row.sideout_pct}%</td></tr>`;
+  }
+}
+
+function renderParticipation(rows) {
+  if (!rows) return;
+  const box = document.getElementById('participationList');
+  box.innerHTML = '';
+  if (!rows.length) {
+    box.innerHTML = '<div style="color:#64748b;">Participation will appear once the match begins.</div>';
+    return;
+  }
+  for (const row of rows) {
+    const player = playerMap[String(row.player?.pk || '')] || row.player;
+    box.innerHTML += `<div style="padding:10px 12px;background:#f8fafc;border-radius:10px;display:flex;justify-content:space-between;gap:8px;"><strong>#${player.jersey_number} ${player.name}</strong><span>${row.minutes_played} min</span></div>`;
+  }
+}
+
+function updateState(data) {
   document.getElementById('ourScore').textContent = data.our_score;
   document.getElementById('theirScore').textContent = data.opponent_score;
   document.getElementById('setRecord').textContent = `${data.our_sets} - ${data.their_sets}`;
@@ -223,72 +369,97 @@ function updateState(data){
   document.getElementById('timeoutsVal').textContent = `Timeouts left: ${data.timeouts_remaining}`;
   document.getElementById('subsVal').textContent = `Subs left: ${data.subs_remaining}`;
   document.getElementById('techVal').textContent = `Technical TOs: ${data.technical_timeouts}`;
+  document.getElementById('currentRun').textContent = data.run_stats.current_run;
+  document.getElementById('longestRun').textContent = data.run_stats.longest_run;
   lineupState = data.lineup || lineupState;
   benchState = data.bench || benchState;
+  renderCourt('courtGrid');
+  renderCourt('fullscreenCourtGrid');
+  renderRotationStats(data.rotation_metrics);
+  renderParticipation(data.participation_totals);
+  renderEvents(data.events || []);
 }
 
-async function recordPoint(us){
-  const data = await api(`/matches/${MATCH_ID}/point/`, {us});
-  if(!data.ok) return alert(data.error || 'Error');
+async function recordPoint(us, mode = 'point') {
+  const data = await api(`/matches/${MATCH_ID}/point/`, { us, mode });
+  if (!data.ok) return alert(data.error || 'Error');
   updateState(data);
-  appendLog(us ? 'Point for our team' : 'Point for opponent');
 }
 
-async function callTimeout(){
+async function callTimeout() {
   const data = await api(`/matches/${MATCH_ID}/timeout/`, {});
-  if(!data.ok) return alert(data.error || 'Error');
+  if (!data.ok) return alert(data.error || 'Error');
   document.getElementById('timeoutsVal').textContent = `Timeouts left: ${data.timeouts_remaining}`;
-  appendLog('Coach timeout');
+  const state = await api(`/matches/${MATCH_ID}/state/`);
+  updateState(state);
 }
 
-async function rotate(direction){
-  const data = await api(`/matches/${MATCH_ID}/rotate/`, {direction});
-  if(!data.ok) return alert(data.error || 'Error');
-  document.getElementById('rotationVal').textContent = data.rotation;
-  appendLog(`Manual rotation ${direction}`);
+async function rotate(direction) {
+  const data = await api(`/matches/${MATCH_ID}/rotate/`, { direction });
+  if (!data.ok) return alert(data.error || 'Error');
+  const state = await api(`/matches/${MATCH_ID}/state/`);
+  updateState(state);
 }
 
-async function undoLastAction(){
+async function undoLastAction() {
   const data = await api(`/matches/${MATCH_ID}/undo/`, {});
-  if(!data.ok) return alert(data.error || 'Error');
+  if (!data.ok) return alert(data.error || 'Error');
   updateState(data);
-  appendLog('Undo last action');
 }
 
-function openLineupModal(){ document.getElementById('lineupModal').style.display = 'flex'; }
-function closeLineupModal(){ document.getElementById('lineupModal').style.display = 'none'; }
-function openSubModal(){ document.getElementById('subModal').style.display = 'flex'; }
-function closeSubModal(){ document.getElementById('subModal').style.display = 'none'; }
+async function tagLastPoint() {
+  const data = await api(`/matches/${MATCH_ID}/tag/`, {
+    player_id: document.getElementById('tag_player').value,
+    tag_type: document.getElementById('tag_type').value,
+  });
+  const feedback = document.getElementById('tagFeedback');
+  if (!data.ok) {
+    feedback.textContent = data.error || 'Error';
+    feedback.style.color = '#b91c1c';
+    return;
+  }
+  feedback.textContent = data.label;
+  feedback.style.color = '#166534';
+}
 
-async function saveLineup(){
+function openLineupModal() { document.getElementById('lineupModal').style.display = 'flex'; }
+function closeLineupModal() { document.getElementById('lineupModal').style.display = 'none'; }
+function openSubModal() { document.getElementById('subModal').style.display = 'flex'; }
+function closeSubModal() { document.getElementById('subModal').style.display = 'none'; }
+function openFullscreenCourt() { document.getElementById('fullscreenCourt').style.display = 'flex'; renderCourt('fullscreenCourtGrid'); }
+function closeFullscreenCourt() { document.getElementById('fullscreenCourt').style.display = 'none'; }
+
+async function saveLineup() {
   const positions = {};
-  for(let i=1;i<=6;i++){
+  for (let i = 1; i <= 6; i++) {
     positions[i] = document.getElementById(`lineup_${i}`).value;
   }
-  const bench = [...document.querySelectorAll('.bench-check:checked')].map(x => x.value);
+  const bench = [...document.querySelectorAll('.bench-check:checked')].map(el => el.value);
   const first_server = document.getElementById('first_server').value;
-  const data = await api(`/matches/${MATCH_ID}/lineup/`, {positions, bench, first_server});
-  if(!data.ok) return alert(data.error || 'Error');
-  appendLog('Lineup updated');
+  const libero_player = document.getElementById('lineup_libero').value;
+  const data = await api(`/matches/${MATCH_ID}/lineup/`, { positions, bench, first_server, libero_player });
+  if (!data.ok) return alert(data.error || 'Error');
   closeLineupModal();
   location.reload();
 }
 
-async function submitSub(){
-  const player_in = document.getElementById('sub_in').value;
-  const player_out = document.getElementById('sub_out').value;
-  const data = await api(`/matches/${MATCH_ID}/sub/`, {player_in, player_out});
-  if(!data.ok) return alert(data.error || 'Error');
-  document.getElementById('subsVal').textContent = `Subs left: ${data.subs_remaining}`;
-  appendLog(`Substitution: ${player_in} in for ${player_out}`);
+async function submitSub() {
+  const data = await api(`/matches/${MATCH_ID}/sub/`, {
+    player_in: document.getElementById('sub_in').value,
+    player_out: document.getElementById('sub_out').value,
+    is_libero_swap: document.getElementById('is_libero_swap').checked,
+  });
+  if (!data.ok) return alert(data.error || 'Error');
   closeSubModal();
   location.reload();
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  renderCourt('courtGrid');
+  renderCourt('fullscreenCourtGrid');
   Object.entries(lineupState || {}).forEach(([pos, pid]) => {
     const sel = document.getElementById(`lineup_${pos}`);
-    if(sel) sel.value = String(pid);
+    if (sel) sel.value = String(pid);
   });
   document.querySelectorAll('.bench-check').forEach(el => {
     el.checked = (benchState || []).map(String).includes(el.value);

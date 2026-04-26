@@ -38,14 +38,19 @@ class PlayerForm(forms.ModelForm):
         return number
 
 
+INVITATION_ROLE_CHOICES = [
+    ('coach', 'Coach'),
+    ('assistant', 'Assistant Coach'),
+    ('manager', 'Manager'),
+    ('parent', 'Parent'),
+]
+
+
 class TeamInvitationForm(forms.ModelForm):
+
     class Meta:
         model = TeamInvitation
         fields = ['email', 'role']
         widgets = {
-            'role': forms.Select(choices=[
-                ('assistant', 'Assistant Coach'),
-                ('manager', 'Manager'),
-                ('parent', 'Parent'),
-            ])
+            'role': forms.Select(choices=INVITATION_ROLE_CHOICES)
         }

@@ -3,6 +3,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from datetime import timedelta
+from io import BytesIO
 from teams.views import get_user_team
 from teams.models import Player, Team
 from schedule.models import Match, Practice, AvailabilityResponse
@@ -86,6 +87,29 @@ def dashboard_view(request):
             'time': p.time.strftime('%I:%M %p'),
         })
 
+    rotation_summary = []
+    for rot in range(1, 7):
+        won = Action.objects.filter(
+            live_match__match__team=team,
+            action_type__in=['point_won', 'sideout'],
+            rotation=rot,
+            is_undone=False,
+        ).count()
+        lost = Action.objects.filter(
+            live_match__match__team=team,
+            action_type='point_lost',
+            rotation=rot,
+            is_undone=False,
+        ).count()
+        total = won + lost
+        rotation_summary.append({
+            'rotation': rot,
+            'won': won,
+            'lost': lost,
+            'pct': round(won / total * 100) if total else 0,
+        })
+    strongest_rotation = max(rotation_summary, key=lambda item: item['pct'], default=None)
+
     return render(request, 'dashboard/index.html', {
         'team': team,
         'player_count': player_count,
@@ -97,6 +121,8 @@ def dashboard_view(request):
         'total_matches': total_matches,
         'results_data': results_data[:3],
         'pending_responses': pending_responses,
+        'rotation_summary': rotation_summary,
+        'strongest_rotation': strongest_rotation,
         'calendar_events_json': json.dumps(calendar_events),
     })
 
@@ -257,5 +283,74 @@ def export_stats_csv(request):
             tags.filter(tag_type='assist').count(),
             tags.filter(tag_type__in=['serve_error', 'attack_error']).count(),
         ])
+    return response
+
+
+def _build_simple_pdf(lines):
+    def escape(text):
+        return text.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
+
+    content_lines = ['BT /F1 12 Tf 50 780 Td 14 TL']
+    first = True
+    for raw_line in lines:
+        line = escape(raw_line)
+        if first:
+            content_lines.append(f'({line}) Tj')
+            first = False
+        else:
+            content_lines.append(f'T* ({line}) Tj')
+    content_lines.append('ET')
+    stream = '\n'.join(content_lines).encode('latin-1', errors='replace')
+
+    buffer = BytesIO()
+    buffer.write(b'%PDF-1.4\n')
+    offsets = []
+
+    def write_obj(number, body):
+        offsets.append(buffer.tell())
+        buffer.write(f'{number} 0 obj\n'.encode('ascii'))
+        if isinstance(body, bytes):
+            buffer.write(body)
+        else:
+            buffer.write(body.encode('latin-1'))
+        buffer.write(b'\nendobj\n')
+
+    write_obj(1, '<< /Type /Catalog /Pages 2 0 R >>')
+    write_obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>')
+    write_obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>')
+    write_obj(4, f'<< /Length {len(stream)} >>\nstream\n'.encode('ascii') + stream + b'\nendstream')
+    write_obj(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+
+    xref_start = buffer.tell()
+    buffer.write(f'xref\n0 {len(offsets) + 1}\n'.encode('ascii'))
+    buffer.write(b'0000000000 65535 f \n')
+    for offset in offsets:
+        buffer.write(f'{offset:010d} 00000 n \n'.encode('ascii'))
+    buffer.write(
+        f'trailer\n<< /Size {len(offsets) + 1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF'.encode('ascii')
+    )
+    return buffer.getvalue()
+
+
+@login_required
+def export_stats_pdf(request):
+    from django.http import HttpResponse
+
+    team = get_user_team(request.user)
+    if not team:
+        return redirect('dashboard')
+
+    lines = [f'VolleyPilot Team Statistics - {team.name}', '']
+    for player in team.players.filter(is_active=True).order_by('jersey_number'):
+        tags = ActionTag.objects.filter(player=player)
+        lines.append(
+            f'#{player.jersey_number} {player.name} | Kills {tags.filter(tag_type="kill").count()} | '
+            f'Blocks {tags.filter(tag_type="block").count()} | Aces {tags.filter(tag_type="ace").count()} | '
+            f'Digs {tags.filter(tag_type="dig").count()} | Assists {tags.filter(tag_type="assist").count()} | '
+            f'Errors {tags.filter(tag_type__in=["serve_error", "attack_error"]).count()}'
+        )
+
+    response = HttpResponse(_build_simple_pdf(lines), content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="team_stats.pdf"'
     return response
 
