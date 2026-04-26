@@ -37,6 +37,7 @@ Open **http://127.0.0.1:8000** in your browser.
 | Coach     | coach@volleypilot.com        | demo1234   |
 | Assistant | assistant@volleypilot.com    | demo1234   |
 | Player    | player@volleypilot.com       | demo1234   |
+| Parent    | parent@volleypilot.com       | demo1234   |
 
 New users register as **fan** by default and see league-wide data.
 
