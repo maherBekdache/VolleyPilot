@@ -108,3 +108,19 @@ class ScheduleAndAvailabilityTests(TestCase):
         match = Match.objects.get(team=self.team, title='Cup Match')
         self.assertEqual(match.ruleset, 'best_of_3')
         self.assertEqual(match.substitution_limit, 9)
+
+    def test_schedule_page_includes_calendar_view(self):
+        Match.objects.create(
+            team=self.team,
+            title='Calendar Match',
+            date=date.today(),
+            time=time(19, 0),
+            location='AUB Gym',
+            opponent='LAU Wolves',
+            created_by=self.coach,
+        )
+        self.client.login(username='coach@example.com', password='demo12345')
+        response = self.client.get(reverse('schedule'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Monthly Calendar')
+        self.assertContains(response, 'Calendar Match')

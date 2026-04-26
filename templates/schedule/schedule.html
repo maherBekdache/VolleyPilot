@@ -25,6 +25,50 @@
     </div>
 </div>
 
+<div class="card calendar-card" style="margin-bottom:24px;">
+    <div class="cal-header">
+        <button type="button" class="cal-nav" onclick="window.location='?tab={{ tab }}&month={{ prev_month }}'">Previous</button>
+        <h3>Monthly Calendar - {{ calendar_month_label }}</h3>
+        <button type="button" class="cal-nav" onclick="window.location='?tab={{ tab }}&month={{ next_month }}'">Next</button>
+    </div>
+    <div class="cal-legend">
+        <div class="cal-legend-item"><span class="cal-dot match"></span> Match</div>
+        <div class="cal-legend-item"><span class="cal-dot practice"></span> Practice</div>
+    </div>
+    <div class="cal-weekdays">
+        <div>Sun</div>
+        <div>Mon</div>
+        <div>Tue</div>
+        <div>Wed</div>
+        <div>Thu</div>
+        <div>Fri</div>
+        <div>Sat</div>
+    </div>
+    <div class="cal-grid">
+        {% for week in calendar_weeks %}
+            {% for day in week %}
+            <div class="cal-day {% if not day.in_month %}empty{% endif %}{% if day.events %} has-events{% endif %}{% if day.is_today %} today{% endif %}">
+                {% if day.in_month %}
+                <div class="cal-day-num">{{ day.day }}</div>
+                <div class="cal-dots">
+                    {% for item in day.events %}
+                    <span class="cal-dot {% if item.type == 'practice' %}practice{% else %}match{% endif %}"></span>
+                    {% endfor %}
+                </div>
+                {% if day.events %}
+                <div class="cal-tooltip">
+                    {% for item in day.events %}
+                    <div>{{ item.time|time:"g:i A" }} - {{ item.title }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+</div>
+
 <div class="timeline">
     {% regroup events by date as date_list %}
     {% for group in date_list %}

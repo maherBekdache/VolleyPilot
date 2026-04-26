@@ -1,3 +1,6 @@
+import calendar
+from datetime import date as date_cls
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -5,6 +8,45 @@ from django.utils import timezone
 from .models import Match, Practice, AvailabilityRequest, AvailabilityResponse
 from .forms import MatchForm, PracticeForm
 from teams.views import get_user_team
+
+
+def _parse_month(month_value):
+    today = timezone.now().date()
+    if not month_value:
+        return date_cls(today.year, today.month, 1)
+    try:
+        year, month = [int(part) for part in month_value.split('-', 1)]
+        return date_cls(year, month, 1)
+    except (TypeError, ValueError):
+        return date_cls(today.year, today.month, 1)
+
+
+def _shift_month(month_start, delta):
+    month_index = (month_start.year * 12 + month_start.month - 1) + delta
+    year, month_zero_based = divmod(month_index, 12)
+    return date_cls(year, month_zero_based + 1, 1)
+
+
+def _build_calendar(events, month_start):
+    today = timezone.now().date()
+    calendar_rows = []
+    event_map = {}
+    for event in events:
+        event_map.setdefault(event['date'], []).append(event)
+
+    month_calendar = calendar.Calendar(firstweekday=6)
+    for week in month_calendar.monthdatescalendar(month_start.year, month_start.month):
+        row = []
+        for day in week:
+            row.append({
+                'date': day,
+                'day': day.day,
+                'in_month': day.month == month_start.month,
+                'is_today': day == today,
+                'events': event_map.get(day, []),
+            })
+        calendar_rows.append(row)
+    return calendar_rows
 
 
 @login_required
@@ -62,8 +104,16 @@ def schedule_view(request):
         filtered = [e for e in events if e['past'] or e['status'] == 'completed']
     else:
         filtered = [e for e in events if not e['past'] and e['status'] != 'completed']
+    month_start = _parse_month(request.GET.get('month'))
+    prev_month = _shift_month(month_start, -1)
+    next_month = _shift_month(month_start, 1)
     return render(request, 'schedule/schedule.html', {
         'events': filtered, 'team': team, 'tab': tab,
+        'calendar_weeks': _build_calendar(filtered, month_start),
+        'calendar_month_label': month_start.strftime('%B %Y'),
+        'calendar_month_value': month_start.strftime('%Y-%m'),
+        'prev_month': prev_month.strftime('%Y-%m'),
+        'next_month': next_month.strftime('%Y-%m'),
     })
 
 

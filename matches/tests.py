@@ -137,3 +137,44 @@ class LiveMatchFlowTests(TestCase):
         self.assertIn('limit', response.json()['error'].lower())
         live.refresh_from_db()
         self.assertEqual(live.match.substitution_limit, 1)
+
+    def test_rotation_timeout_and_substitution_validation_behaviors(self):
+        live = self._start_match()
+        response = self.client.post(
+            reverse('manual_rotate', args=[self.match.pk]),
+            data=json.dumps({'direction': 'forward'}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        live.refresh_from_db()
+        self.assertEqual(live.current_rotation, 2)
+
+        timeout_one = self.client.post(reverse('call_timeout', args=[self.match.pk]), data=json.dumps({}), content_type='application/json')
+        timeout_two = self.client.post(reverse('call_timeout', args=[self.match.pk]), data=json.dumps({}), content_type='application/json')
+        timeout_three = self.client.post(reverse('call_timeout', args=[self.match.pk]), data=json.dumps({}), content_type='application/json')
+        self.assertEqual(timeout_one.status_code, 200)
+        self.assertEqual(timeout_two.status_code, 200)
+        self.assertEqual(timeout_three.status_code, 400)
+        self.assertIn('No timeouts remaining', timeout_three.json()['error'])
+
+        invalid_sub = self.client.post(
+            reverse('make_substitution', args=[self.match.pk]),
+            data=json.dumps({
+                'player_in': self.players[0].pk,
+                'player_out': self.players[7].pk,
+                'is_libero_swap': False,
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(invalid_sub.status_code, 400)
+        self.assertIn('Outgoing player must be on the court', invalid_sub.json()['error'])
+
+    def test_live_match_page_contains_court_modes(self):
+        self._start_match()
+        response = self.client.get(reverse('live_match', args=[self.match.pk]))
+        self.assertContains(response, 'Fullscreen Court')
+        self.assertContains(response, 'Court Contrast: Off')
+        self.assertContains(response, 'Mini Court Thumbnail')
+        self.assertContains(response, 'id="courtGrid"', html=False)
+        self.assertContains(response, 'id="miniCourtGrid"', html=False)
+        self.assertContains(response, 'id="fullscreenCourt"', html=False)
