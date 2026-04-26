@@ -48,6 +48,26 @@ def team_create_view(request):
 
 
 @login_required
+def team_settings_view(request):
+    team = get_user_team(request.user)
+    if not team or not request.user.is_staff_role:
+        messages.error(request, 'Permission denied.')
+        return redirect('roster')
+    if request.method == 'POST':
+        form = TeamForm(request.POST, instance=team)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Team defaults updated.')
+            return redirect('team_settings')
+    else:
+        form = TeamForm(instance=team)
+    return render(request, 'teams/team_form.html', {
+        'form': form,
+        'age_choices': TeamForm.AGE_CHOICES,
+    })
+
+
+@login_required
 def roster_view(request):
     if request.user.is_fan_role:
         team_id = request.GET.get('team', '')

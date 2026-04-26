@@ -72,6 +72,10 @@ def _regular_subs(live):
     return live.actions.filter(action_type='substitution', set_number=live.current_set, is_undone=False).count()
 
 
+def _substitution_limit(live):
+    return max(1, live.match.substitution_limit or live.match.team.default_substitution_limit or 6)
+
+
 def _player_lookup(players):
     return {p.pk: p for p in players}
 
@@ -248,7 +252,7 @@ def _build_context(live, team, players):
     our_sets, their_sets = _sets_won(live)
     position_players = _lineup_players(live, players)
     bench_players = _bench_players(live, players)
-    subs_remaining = max(0, 6 - _regular_subs(live))
+    subs_remaining = max(0, _substitution_limit(live) - _regular_subs(live))
     _, timeouts_remaining = _get_timeouts(live)
     technical_timeouts = _get_technical_timeouts(live)
     actions = live.actions.filter(is_undone=False).order_by('-timestamp')[:25]
@@ -278,6 +282,7 @@ def _build_context(live, team, players):
         'position_players': position_players,
         'bench_players': bench_players,
         'subs_remaining': subs_remaining,
+        'substitution_limit': _substitution_limit(live),
         'timeouts_remaining': timeouts_remaining,
         'technical_timeouts': technical_timeouts,
         'action_log': action_log,
@@ -333,6 +338,9 @@ def start_match(request, match_id):
         live.libero_player = libero_player
         live.ended_at = None
         live.save()
+        team.preferred_lineup = lineup
+        team.preferred_first_server = first_server
+        team.save(update_fields=['preferred_lineup', 'preferred_first_server'])
         _ensure_participation_records(live, players)
         _sync_participation(live, players, timestamp=live.started_at)
         SetScore.objects.get_or_create(live_match=live, set_number=1)
@@ -364,13 +372,28 @@ def start_match(request, match_id):
         return redirect('live_match', match_id=match.id)
 
     existing = getattr(match, 'live', None)
+    selected_lineup = getattr(existing, 'lineup', None) if existing else None
+    if not selected_lineup:
+        preferred = team.preferred_lineup or {}
+        valid_ids = {player.pk for player in players}
+        preferred = {
+            str(position): int(player_id)
+            for position, player_id in preferred.items()
+            if int(player_id) in valid_ids
+        }
+        if len(preferred) == 6 and len(set(preferred.values())) == 6:
+            selected_lineup = preferred
+    selected_lineup = selected_lineup or {}
+    selected_bench = getattr(existing, 'bench', None) if existing else None
+    if selected_bench is None:
+        selected_bench = [player.pk for player in players if player.pk not in selected_lineup.values()]
     return render(request, 'matches/match_startup.html', {
         'match': match,
         'team': team,
         'players': players,
-        'selected_lineup': getattr(existing, 'lineup', {}) if existing else {},
-        'selected_bench': getattr(existing, 'bench', []) if existing else [],
-        'first_server': getattr(existing, 'first_server', 1) if existing else 1,
+        'selected_lineup': selected_lineup,
+        'selected_bench': selected_bench,
+        'first_server': getattr(existing, 'first_server', team.preferred_first_server) if existing else team.preferred_first_server,
         'selected_libero': getattr(existing, 'libero_player_id', None) if existing else None,
     })
 
@@ -414,6 +437,9 @@ def set_lineup(request, match_id):
         live.current_rotation = int(data['first_server'])
     live.libero_player = libero_player
     live.save()
+    team.preferred_lineup = positions
+    team.preferred_first_server = live.first_server
+    team.save(update_fields=['preferred_lineup', 'preferred_first_server'])
     _sync_participation(live, timestamp=timezone.now())
     Action.objects.create(
         live_match=live,
@@ -570,6 +596,8 @@ def make_substitution(request, match_id):
         return JsonResponse({'ok': False, 'error': 'Choose two different players.'}, status=400)
     if not is_libero_swap and _regular_subs(live) >= 6:
         return JsonResponse({'ok': False, 'error': 'Substitution limit reached for this set.'}, status=400)
+    if not is_libero_swap and _regular_subs(live) >= _substitution_limit(live):
+        return JsonResponse({'ok': False, 'error': 'Substitution limit reached for this set.'}, status=400)
 
     lineup = live.lineup or {}
     bench = set(int(pid) for pid in live.bench or [])
@@ -603,7 +631,7 @@ def make_substitution(request, match_id):
             'is_libero_swap': is_libero_swap,
         },
     )
-    return JsonResponse({'ok': True, 'subs_remaining': max(0, 6 - _regular_subs(live))})
+    return JsonResponse({'ok': True, 'subs_remaining': max(0, _substitution_limit(live) - _regular_subs(live))})
 
 
 @require_POST
@@ -736,7 +764,8 @@ def _state_payload(live, include_events=False, set_over=False, match_over=False)
         'current_set': live.current_set,
         'our_sets': our_sets,
         'their_sets': their_sets,
-        'subs_remaining': max(0, 6 - _regular_subs(live)),
+        'subs_remaining': max(0, _substitution_limit(live) - _regular_subs(live)),
+        'substitution_limit': _substitution_limit(live),
         'timeouts_remaining': timeouts_remaining,
         'technical_timeouts': _get_technical_timeouts(live),
         'is_active': live.is_active,

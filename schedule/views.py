@@ -83,7 +83,10 @@ def match_create_view(request):
             messages.success(request, 'Match event created successfully.')
             return redirect('schedule')
     else:
-        form = MatchForm()
+        form = MatchForm(initial={
+            'ruleset': team.default_ruleset,
+            'substitution_limit': team.default_substitution_limit,
+        })
     return render(request, 'schedule/event_form.html', {'form': form, 'event_type': 'Match'})
 
 

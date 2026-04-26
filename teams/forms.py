@@ -13,10 +13,24 @@ class TeamForm(forms.ModelForm):
     ]
 
     age_group = forms.ChoiceField(choices=[('', 'Select age group')] + AGE_CHOICES, required=False)
+    default_substitution_limit = forms.IntegerField(min_value=1, max_value=30, initial=6)
+    preferred_first_server = forms.IntegerField(min_value=1, max_value=6, initial=1)
 
     class Meta:
         model = Team
-        fields = ['name', 'age_group', 'club_affiliation']
+        fields = [
+            'name',
+            'age_group',
+            'club_affiliation',
+            'default_ruleset',
+            'default_substitution_limit',
+            'preferred_first_server',
+        ]
+        help_texts = {
+            'default_ruleset': 'Used as the default when coaches create a new match.',
+            'default_substitution_limit': 'VolleyPilot will enforce this per set during live matches.',
+            'preferred_first_server': 'Pre-select this serving position when opening live match setup.',
+        }
 
 
 class PlayerForm(forms.ModelForm):

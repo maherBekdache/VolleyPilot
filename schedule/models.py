@@ -22,6 +22,7 @@ class Match(models.Model):
     opponent = models.CharField(max_length=100)
     is_home = models.BooleanField(default=True)
     ruleset = models.CharField(max_length=30, choices=RULESET_CHOICES, default='fivb_best_of_5')
+    substitution_limit = models.PositiveIntegerField(default=6)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='scheduled')
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 

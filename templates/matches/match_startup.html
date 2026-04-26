@@ -34,6 +34,10 @@
             </select>
         </div>
 
+        <div style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:10px;color:#475569;font-size:13px;">
+            Team defaults: {{ match.team.get_default_ruleset_display }} and {{ match.team.default_substitution_limit }} substitutions per set.
+        </div>
+
         <div class="form-group" style="margin-top:16px;">
             <label>Assigned Libero</label>
             <select name="libero_player" id="libero_player">
@@ -74,7 +78,7 @@
                 <div style="padding:10px;border-radius:10px;background:#dcfce7;">Pos 6</div>
                 <div style="padding:10px;border-radius:10px;background:#fef3c7;">Pos 1 *</div>
             </div>
-            <div style="font-size:13px;color:#64748b;margin-top:10px;">The bottom-right slot is the serving position when the match begins.</div>
+        <div style="font-size:13px;color:#64748b;margin-top:10px;">The bottom-right slot is the serving position when the match begins. Once you launch the match, this lineup becomes the saved default for the next setup.</div>
         </div>
     </div>
 </form>

@@ -4,9 +4,18 @@ import uuid
 
 
 class Team(models.Model):
+    DEFAULT_RULESET_CHOICES = [
+        ('fivb_best_of_5', 'FIVB Indoor - Best of 5'),
+        ('best_of_3', 'Short Match - Best of 3'),
+        ('training_scrimmage', 'Training Scrimmage'),
+    ]
     name = models.CharField(max_length=100)
     age_group = models.CharField(max_length=50, blank=True)
     club_affiliation = models.CharField(max_length=100, blank=True)
+    default_ruleset = models.CharField(max_length=30, choices=DEFAULT_RULESET_CHOICES, default='fivb_best_of_5')
+    default_substitution_limit = models.PositiveIntegerField(default=6)
+    preferred_lineup = models.JSONField(default=dict, blank=True)
+    preferred_first_server = models.PositiveIntegerField(default=1)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='created_teams')
     created_at = models.DateTimeField(auto_now_add=True)
 

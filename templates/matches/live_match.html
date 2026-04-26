@@ -32,7 +32,7 @@
                 <span class="badge" style="background:#1d4ed8;color:#fff;">Rotation <span id="rotationVal">{{ live.current_rotation }}</span></span>
                 <span class="badge" style="background:#0369a1;color:#fff;" id="serveState">{% if live.our_serve %}We are serving{% else %}Opponent serving{% endif %}</span>
                 <span class="badge" style="background:#d97706;color:#fff;" id="timeoutsVal">Timeouts left: {{ timeouts_remaining }}</span>
-                <span class="badge" style="background:#7c3aed;color:#fff;" id="subsVal">Subs left: {{ subs_remaining }}</span>
+                <span class="badge" style="background:#7c3aed;color:#fff;" id="subsVal">Subs left: {{ subs_remaining }}/{{ substitution_limit }}</span>
                 <span class="badge" style="background:#059669;color:#fff;" id="techVal">Technical TOs: {{ technical_timeouts }}</span>
                 <span class="badge" style="background:#334155;color:#fff;">Libero: <span id="liberoName">{% if libero_player %}#{{ libero_player.jersey_number }} {{ libero_player.name }}{% else %}Not assigned{% endif %}</span></span>
             </div>
@@ -48,19 +48,7 @@
                 <h3>Rotation Preview</h3>
                 <div style="font-size:13px;color:#64748b;">Position 1 = serving slot</div>
             </div>
-            <div id="courtGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
-                {% for pos in '456123' %}
-                <div class="court-cell" data-pos="{{ pos }}" style="background:{% if pos == '1' %}#fef3c7{% elif pos in '456' %}#dbeafe{% else %}#dcfce7{% endif %};border:1px solid #dbeafe;border-radius:12px;padding:16px;min-height:92px;display:flex;flex-direction:column;justify-content:center;">
-                    <div style="font-size:12px;color:#64748b;">Position {{ pos }}{% if pos == '1' %} *{% endif %}</div>
-                    {% for key, player in position_players.items %}
-                        {% if key|stringformat:'s' == pos %}
-                        <div style="font-weight:700;">#{{ player.jersey_number }} {{ player.name }}</div>
-                        <div style="font-size:13px;color:#475569;">{{ player.position }}</div>
-                        {% endif %}
-                    {% endfor %}
-                </div>
-                {% endfor %}
-            </div>
+            <div id="courtGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;"></div>
             {% if user.is_staff_role and live.is_active %}
             <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-secondary" onclick="openLineupModal()">Edit Lineup</button>
@@ -177,8 +165,18 @@
         </div>
 
         <div class="card">
+            <h3>Sync Status</h3>
+            <div id="syncStatusText" style="color:#475569;font-weight:600;">Connected. Live actions are syncing normally.</div>
+            <div id="syncStatusMeta" style="font-size:13px;color:#64748b;margin-top:8px;">No pending offline actions.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                <button type="button" class="btn btn-secondary" onclick="restoreCachedState()">Restore Cached State</button>
+                <button type="button" class="btn btn-secondary" onclick="flushPendingActions()">Retry Pending Actions</button>
+            </div>
+        </div>
+
+        <div class="card">
             <h3>Bench Players</h3>
-            <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;flex-direction:column;gap:8px;" id="benchList">
                 {% for p in bench_players %}
                 <div style="padding:10px 12px;background:#f8fafc;border-radius:10px;">
                     <strong>#{{ p.jersey_number }} {{ p.name }}</strong>
@@ -287,10 +285,43 @@
 <script>
 const MATCH_ID = {{ match.id }};
 const CSRF = '{{ csrf_token }}';
+const DEFAULT_SUB_LIMIT = {{ substitution_limit }};
+const STATE_KEY = `volleypilot-match-state-${MATCH_ID}`;
+const QUEUE_KEY = `volleypilot-match-queue-${MATCH_ID}`;
 let lineupState = JSON.parse(document.getElementById('lineup-json').textContent || '{}');
 let benchState = JSON.parse(document.getElementById('bench-json').textContent || '[]');
 const players = JSON.parse(document.getElementById('players-json').textContent || '[]');
 const playerMap = Object.fromEntries(players.map(player => [String(player.pk), player]));
+
+function readQueue() {
+  try {
+    return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeQueue(queue) {
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  localStorage.setItem('volleypilot-pending-actions', String(queue.length));
+}
+
+function updateSyncStatus(message, meta) {
+  const queue = readQueue();
+  document.getElementById('syncStatusText').textContent = message || (navigator.onLine ? 'Connected. Live actions are syncing normally.' : 'Offline. VolleyPilot is storing actions locally.');
+  document.getElementById('syncStatusMeta').textContent = meta || (queue.length ? `${queue.length} action(s) waiting to sync.` : 'No pending offline actions.');
+}
+
+function queueAction(url, body) {
+  const queue = readQueue();
+  queue.push({ url, body, queuedAt: new Date().toISOString() });
+  writeQueue(queue);
+  updateSyncStatus('Offline action saved locally.', `${queue.length} action(s) waiting to sync.`);
+}
+
+function persistState(data) {
+  localStorage.setItem(STATE_KEY, JSON.stringify(data));
+}
 
 async function api(url, body = null) {
   const opts = { method: body ? 'POST' : 'GET', headers: { 'X-CSRFToken': CSRF } };
@@ -298,8 +329,16 @@ async function api(url, body = null) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const response = await fetch(url, opts);
-  return await response.json();
+  try {
+    const response = await fetch(url, opts);
+    return await response.json();
+  } catch (error) {
+    if (body) {
+      queueAction(url, body);
+      return { ok: true, queued: true };
+    }
+    return { ok: false, error: 'Unable to reach the server right now.' };
+  }
 }
 
 function renderCourt(containerId) {
@@ -317,6 +356,20 @@ function renderCourt(containerId) {
       <div style="font-size:13px;color:#475569;">${player ? player.position : ''}</div>
     `;
     container.appendChild(card);
+  }
+}
+
+function renderBench() {
+  const container = document.getElementById('benchList');
+  if (!container) return;
+  container.innerHTML = '';
+  const benchPlayers = (benchState || []).map(playerId => playerMap[String(playerId)]).filter(Boolean);
+  if (!benchPlayers.length) {
+    container.innerHTML = '<div style="color:#64748b;">No bench players selected.</div>';
+    return;
+  }
+  for (const player of benchPlayers) {
+    container.innerHTML += `<div style="padding:10px 12px;background:#f8fafc;border-radius:10px;"><strong>#${player.jersey_number} ${player.name}</strong><div style="font-size:13px;color:#64748b;">${player.position}</div></div>`;
   }
 }
 
@@ -361,13 +414,14 @@ function renderParticipation(rows) {
 }
 
 function updateState(data) {
+  persistState(data);
   document.getElementById('ourScore').textContent = data.our_score;
   document.getElementById('theirScore').textContent = data.opponent_score;
   document.getElementById('setRecord').textContent = `${data.our_sets} - ${data.their_sets}`;
   document.getElementById('rotationVal').textContent = data.rotation;
   document.getElementById('serveState').textContent = data.our_serve ? 'We are serving' : 'Opponent serving';
   document.getElementById('timeoutsVal').textContent = `Timeouts left: ${data.timeouts_remaining}`;
-  document.getElementById('subsVal').textContent = `Subs left: ${data.subs_remaining}`;
+  document.getElementById('subsVal').textContent = `Subs left: ${data.subs_remaining}/${data.substitution_limit || DEFAULT_SUB_LIMIT}`;
   document.getElementById('techVal').textContent = `Technical TOs: ${data.technical_timeouts}`;
   document.getElementById('currentRun').textContent = data.run_stats.current_run;
   document.getElementById('longestRun').textContent = data.run_stats.longest_run;
@@ -375,34 +429,95 @@ function updateState(data) {
   benchState = data.bench || benchState;
   renderCourt('courtGrid');
   renderCourt('fullscreenCourtGrid');
+  renderBench();
   renderRotationStats(data.rotation_metrics);
   renderParticipation(data.participation_totals);
   renderEvents(data.events || []);
+  updateSyncStatus();
+}
+
+function restoreCachedState() {
+  const raw = localStorage.getItem(STATE_KEY);
+  if (!raw) {
+    updateSyncStatus('No cached state found for this match.', 'Start live tracking once while online to build an offline snapshot.');
+    return;
+  }
+  try {
+    updateState(JSON.parse(raw));
+    updateSyncStatus('Cached state restored.', 'This is the latest locally saved snapshot.');
+  } catch (error) {
+    updateSyncStatus('Cached state could not be restored.', 'The local snapshot is invalid.');
+  }
+}
+
+async function flushPendingActions() {
+  const queue = readQueue();
+  if (!queue.length) {
+    updateSyncStatus('Connected. Live actions are syncing normally.', 'No pending offline actions.');
+    return;
+  }
+  if (!navigator.onLine) {
+    updateSyncStatus('Still offline.', `${queue.length} action(s) remain queued until the connection returns.`);
+    return;
+  }
+  const remaining = [...queue];
+  while (remaining.length) {
+    const next = remaining[0];
+    try {
+      const response = await fetch(next.url, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': CSRF,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(next.body),
+      });
+      if (!response.ok) {
+        writeQueue(remaining);
+        updateSyncStatus('Sync paused.', `${remaining.length} action(s) are still pending because one replay failed.`);
+        return;
+      }
+      remaining.shift();
+      writeQueue(remaining);
+    } catch (error) {
+      writeQueue(remaining);
+      updateSyncStatus('Still offline.', `${remaining.length} action(s) remain queued until the connection returns.`);
+      return;
+    }
+  }
+  const state = await api(`/matches/${MATCH_ID}/state/`);
+  if (state.ok) {
+    updateState(state);
+  }
+  updateSyncStatus('All pending actions synced.', 'Your local queue is empty again.');
 }
 
 async function recordPoint(us, mode = 'point') {
   const data = await api(`/matches/${MATCH_ID}/point/`, { us, mode });
+  if (data.queued) return;
   if (!data.ok) return alert(data.error || 'Error');
   updateState(data);
 }
 
 async function callTimeout() {
   const data = await api(`/matches/${MATCH_ID}/timeout/`, {});
+  if (data.queued) return;
   if (!data.ok) return alert(data.error || 'Error');
-  document.getElementById('timeoutsVal').textContent = `Timeouts left: ${data.timeouts_remaining}`;
   const state = await api(`/matches/${MATCH_ID}/state/`);
-  updateState(state);
+  if (state.ok) updateState(state);
 }
 
 async function rotate(direction) {
   const data = await api(`/matches/${MATCH_ID}/rotate/`, { direction });
+  if (data.queued) return;
   if (!data.ok) return alert(data.error || 'Error');
   const state = await api(`/matches/${MATCH_ID}/state/`);
-  updateState(state);
+  if (state.ok) updateState(state);
 }
 
 async function undoLastAction() {
   const data = await api(`/matches/${MATCH_ID}/undo/`, {});
+  if (data.queued) return;
   if (!data.ok) return alert(data.error || 'Error');
   updateState(data);
 }
@@ -413,6 +528,11 @@ async function tagLastPoint() {
     tag_type: document.getElementById('tag_type').value,
   });
   const feedback = document.getElementById('tagFeedback');
+  if (data.queued) {
+    feedback.textContent = 'Tag saved locally and will sync when you reconnect.';
+    feedback.style.color = '#92400e';
+    return;
+  }
   if (!data.ok) {
     feedback.textContent = data.error || 'Error';
     feedback.style.color = '#b91c1c';
@@ -438,6 +558,10 @@ async function saveLineup() {
   const first_server = document.getElementById('first_server').value;
   const libero_player = document.getElementById('lineup_libero').value;
   const data = await api(`/matches/${MATCH_ID}/lineup/`, { positions, bench, first_server, libero_player });
+  if (data.queued) {
+    closeLineupModal();
+    return;
+  }
   if (!data.ok) return alert(data.error || 'Error');
   closeLineupModal();
   location.reload();
@@ -449,6 +573,10 @@ async function submitSub() {
     player_out: document.getElementById('sub_out').value,
     is_libero_swap: document.getElementById('is_libero_swap').checked,
   });
+  if (data.queued) {
+    closeSubModal();
+    return;
+  }
   if (!data.ok) return alert(data.error || 'Error');
   closeSubModal();
   location.reload();
@@ -457,6 +585,8 @@ async function submitSub() {
 window.addEventListener('DOMContentLoaded', () => {
   renderCourt('courtGrid');
   renderCourt('fullscreenCourtGrid');
+  renderBench();
+  restoreCachedState();
   Object.entries(lineupState || {}).forEach(([pos, pid]) => {
     const sel = document.getElementById(`lineup_${pos}`);
     if (sel) sel.value = String(pid);
@@ -464,6 +594,9 @@ window.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.bench-check').forEach(el => {
     el.checked = (benchState || []).map(String).includes(el.value);
   });
+  updateSyncStatus();
 });
+
+window.addEventListener('online', flushPendingActions);
 </script>
 {% endblock %}

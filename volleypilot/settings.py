@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -129,4 +130,11 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = os.environ.get('VOLLEYPILOT_EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.environ.get('VOLLEYPILOT_EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.environ.get('VOLLEYPILOT_EMAIL_PORT', '25'))
+EMAIL_HOST_USER = os.environ.get('VOLLEYPILOT_EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('VOLLEYPILOT_EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('VOLLEYPILOT_EMAIL_USE_TLS', 'false').lower() in {'1', 'true', 'yes', 'on'}
+EMAIL_USE_SSL = os.environ.get('VOLLEYPILOT_EMAIL_USE_SSL', 'false').lower() in {'1', 'true', 'yes', 'on'}
+DEFAULT_FROM_EMAIL = os.environ.get('VOLLEYPILOT_DEFAULT_FROM_EMAIL', 'noreply@volleypilot.local')

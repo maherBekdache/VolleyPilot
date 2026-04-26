@@ -5,57 +5,69 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}VolleyPilot{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <div id="globalStatusBanner" class="global-status-banner" hidden>
+        <div>
+            <strong id="globalStatusTitle">Offline mode</strong>
+            <span id="globalStatusText">Changes will sync when your connection comes back.</span>
+        </div>
+        <div id="globalStatusMeta" class="status-meta"></div>
+    </div>
     <div class="app-container">
-        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h1>🏐 VolleyPilot</h1>
+                <h1>VolleyPilot</h1>
             </div>
             <nav class="sidebar-nav">
                 <a href="{% url 'dashboard' %}" class="nav-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
-                    <span class="icon">📊</span>
+                    <span class="icon">Dashboard</span>
                     <span>Dashboard</span>
                 </a>
                 {% if not user.is_parent_role and not user.is_fan_role %}
                 <a href="{% url 'roster' %}" class="nav-item {% if 'roster' in request.resolver_match.url_name or 'player' in request.resolver_match.url_name %}active{% endif %}">
-                    <span class="icon">👥</span>
+                    <span class="icon">Roster</span>
                     <span>Team Roster</span>
                 </a>
                 {% if user.is_coach %}
                 <a href="{% url 'invite' %}" class="nav-item {% if request.resolver_match.url_name == 'invite' %}active{% endif %}">
-                    <span class="icon">✉️</span>
+                    <span class="icon">Invite</span>
                     <span>Invite Members</span>
+                </a>
+                {% endif %}
+                {% if user.is_staff_role %}
+                <a href="{% url 'team_settings' %}" class="nav-item {% if request.resolver_match.url_name == 'team_settings' %}active{% endif %}">
+                    <span class="icon">Settings</span>
+                    <span>Team Settings</span>
                 </a>
                 {% endif %}
                 {% endif %}
                 {% if user.is_fan_role %}
                 <a href="{% url 'roster' %}" class="nav-item {% if 'roster' in request.resolver_match.url_name %}active{% endif %}">
-                    <span class="icon">👥</span>
+                    <span class="icon">Roster</span>
                     <span>Rosters</span>
                 </a>
                 {% endif %}
                 <a href="{% url 'schedule' %}" class="nav-item {% if request.resolver_match.url_name == 'schedule' %}active{% endif %}">
-                    <span class="icon">📅</span>
+                    <span class="icon">Schedule</span>
                     <span>Schedule</span>
                 </a>
                 {% if not user.is_parent_role %}
                 <a href="{% url 'statistics' %}" class="nav-item {% if request.resolver_match.url_name == 'statistics' %}active{% endif %}">
-                    <span class="icon">📈</span>
+                    <span class="icon">Stats</span>
                     <span>Statistics</span>
                 </a>
                 {% endif %}
                 {% if not user.is_parent_role and not user.is_fan_role %}
                 <a href="{% url 'drill_list' %}" class="nav-item {% if 'drill' in request.resolver_match.url_name %}active{% endif %}">
-                    <span class="icon">🎯</span>
+                    <span class="icon">Drills</span>
                     <span>Practice Drills</span>
                 </a>
                 {% endif %}
                 <a href="{% url 'results' %}" class="nav-item {% if request.resolver_match.url_name == 'results' %}active{% endif %}">
-                    <span class="icon">🏆</span>
+                    <span class="icon">Results</span>
                     <span>Game Results</span>
                 </a>
             </nav>
@@ -66,7 +78,9 @@
                 <div style="color: #64748b; font-size: 12px; margin-bottom: 12px;">
                     {{ user.get_role_display }}
                 </div>
-                <div style="display: flex; gap: 8px; align-items: center;">
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <button type="button" id="accessibilityToggle" style="background: none; border: none; color: #94a3b8; font-size: 12px; cursor: pointer; padding: 0;">High Contrast</button>
+                    <span style="color: #475569;">|</span>
                     <a href="{% url 'profile' %}" style="color: #94a3b8; text-decoration: none; font-size: 12px;">Profile</a>
                     <span style="color: #475569;">|</span>
                     <form method="post" action="{% url 'logout' %}" style="display: inline; margin: 0; padding: 0;">
@@ -77,7 +91,6 @@
             </div>
         </aside>
 
-        <!-- Main Content -->
         <main class="main-content">
             {% if messages %}
             <div style="margin-bottom: 16px;">
@@ -97,5 +110,50 @@
     </div>
 
     {% block extra_js %}{% endblock %}
+    <script>
+    (function () {
+      const body = document.body;
+      const banner = document.getElementById('globalStatusBanner');
+      const title = document.getElementById('globalStatusTitle');
+      const text = document.getElementById('globalStatusText');
+      const meta = document.getElementById('globalStatusMeta');
+      const toggle = document.getElementById('accessibilityToggle');
+      const preferenceKey = 'volleypilot-high-contrast';
+
+      function updateBanner() {
+        const pending = Number(localStorage.getItem('volleypilot-pending-actions') || '0');
+        const online = navigator.onLine;
+        if (online && pending === 0) {
+          banner.hidden = true;
+          return;
+        }
+        banner.hidden = false;
+        if (online) {
+          title.textContent = 'Sync pending';
+          text.textContent = 'VolleyPilot is online and replaying any stored live-match actions.';
+        } else {
+          title.textContent = 'Offline mode';
+          text.textContent = 'Live match changes are being saved locally until your connection returns.';
+        }
+        meta.textContent = pending > 0 ? `${pending} pending action${pending === 1 ? '' : 's'}` : (online ? 'Connected' : 'Connection lost');
+      }
+
+      function applyContrast(enabled) {
+        body.classList.toggle('hc', enabled);
+        localStorage.setItem(preferenceKey, enabled ? '1' : '0');
+      }
+
+      if (localStorage.getItem(preferenceKey) === '1') {
+        applyContrast(true);
+      }
+      if (toggle) {
+        toggle.addEventListener('click', () => applyContrast(!body.classList.contains('hc')));
+      }
+      window.addEventListener('online', updateBanner);
+      window.addEventListener('offline', updateBanner);
+      window.addEventListener('storage', updateBanner);
+      updateBanner();
+    })();
+    </script>
 </body>
 </html>

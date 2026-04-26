@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Club, User
-from schedule.models import AvailabilityRequest, AvailabilityResponse, Practice
+from schedule.models import AvailabilityRequest, AvailabilityResponse, Match, Practice
 from teams.models import Player, Team, TeamMembership
 
 
@@ -84,3 +84,27 @@ class ScheduleAndAvailabilityTests(TestCase):
         self.client.login(username='coach@example.com', password='demo12345')
         response = self.client.get(reverse('availability_summary', args=['practice', practice.pk]))
         self.assertEqual(response.status_code, 200)
+
+    def test_match_creation_uses_team_defaults(self):
+        self.team.default_ruleset = 'best_of_3'
+        self.team.default_substitution_limit = 9
+        self.team.save(update_fields=['default_ruleset', 'default_substitution_limit'])
+        self.client.login(username='coach@example.com', password='demo12345')
+        response = self.client.get(reverse('match_create'))
+        self.assertContains(response, 'value="9"')
+        self.assertContains(response, 'best_of_3')
+
+        response = self.client.post(reverse('match_create'), {
+            'title': 'Cup Match',
+            'date': date.today().isoformat(),
+            'time': time(18, 30).strftime('%H:%M'),
+            'location': 'AUB Gym',
+            'opponent': 'LAU Wolves',
+            'is_home': 'on',
+            'ruleset': 'best_of_3',
+            'substitution_limit': 9,
+        })
+        self.assertRedirects(response, reverse('schedule'))
+        match = Match.objects.get(team=self.team, title='Cup Match')
+        self.assertEqual(match.ruleset, 'best_of_3')
+        self.assertEqual(match.substitution_limit, 9)

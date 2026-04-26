@@ -70,3 +70,19 @@ class InvitationFlowTests(TestCase):
         self.assertEqual(invite.status, 'accepted')
         self.assertEqual(matching_user.role, 'manager')
         self.assertTrue(TeamMembership.objects.filter(team=self.team, user=matching_user, role='manager').exists())
+
+    def test_team_settings_update_persists_defaults(self):
+        self.client.login(username='coach@example.com', password='demo12345')
+        response = self.client.post(reverse('team_settings'), {
+            'name': self.team.name,
+            'age_group': self.team.age_group,
+            'club_affiliation': self.team.club_affiliation,
+            'default_ruleset': 'best_of_3',
+            'default_substitution_limit': 9,
+            'preferred_first_server': 4,
+        })
+        self.assertRedirects(response, reverse('team_settings'))
+        self.team.refresh_from_db()
+        self.assertEqual(self.team.default_ruleset, 'best_of_3')
+        self.assertEqual(self.team.default_substitution_limit, 9)
+        self.assertEqual(self.team.preferred_first_server, 4)

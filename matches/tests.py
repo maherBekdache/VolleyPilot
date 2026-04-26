@@ -109,3 +109,31 @@ class LiveMatchFlowTests(TestCase):
         self.assertIn('rotation_metrics', state)
         self.assertIn('run_stats', state)
         self.assertIn('participation_totals', state)
+
+    def test_regular_substitutions_respect_match_limit(self):
+        self.match.substitution_limit = 1
+        self.match.save(update_fields=['substitution_limit'])
+        live = self._start_match()
+        response = self.client.post(
+            reverse('make_substitution', args=[self.match.pk]),
+            data=json.dumps({
+                'player_in': self.players[6].pk,
+                'player_out': self.players[4].pk,
+                'is_libero_swap': False,
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        response = self.client.post(
+            reverse('make_substitution', args=[self.match.pk]),
+            data=json.dumps({
+                'player_in': self.players[7].pk,
+                'player_out': self.players[3].pk,
+                'is_libero_swap': False,
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('limit', response.json()['error'].lower())
+        live.refresh_from_db()
+        self.assertEqual(live.match.substitution_limit, 1)
