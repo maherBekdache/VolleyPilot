@@ -216,18 +216,24 @@ def invite_view(request):
             invite.team = team
             invite.save()
             accept_url = request.build_absolute_uri(reverse('accept_invite', args=[invite.token]))
-            send_mail(
-                subject=f"You're invited to join {team.name} on VolleyPilot",
-                message=(
-                    f"Hello,\n\n{request.user.get_full_name() or request.user.email} invited you to join "
-                    f"{team.name} as {invite.get_role_display()}.\n\n"
-                    f"Use this link to accept or decline the invitation:\n{accept_url}\n"
-                ),
-                from_email=None,
-                recipient_list=[invite.email],
-                fail_silently=True,
-            )
-            messages.success(request, f'Invitation created for {invite.email}. Share this link if needed: {accept_url}')
+            # === NEW ADDITION START: SMTP-backed invite email trigger ===
+            from .notifications import send_team_invitation_email
+
+            try:
+                email_sent = send_team_invitation_email(invite, request.user, accept_url)
+            except Exception as exc:
+                email_sent = False
+                messages.warning(
+                    request,
+                    f'Invitation was created, but the email could not be sent: {exc}. '
+                    f'Share this link manually: {accept_url}'
+                )
+
+            if email_sent:
+                messages.success(request, f'Invitation email sent to {invite.email}.')
+            else:
+                messages.info(request, f'Invitation created for {invite.email}. Share this link if needed: {accept_url}')
+            # === NEW ADDITION END: SMTP-backed invite email trigger ===
             return redirect('roster')
     else:
         form = TeamInvitationForm()

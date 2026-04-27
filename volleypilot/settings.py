@@ -164,6 +164,15 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
+# === NEW ADDITION START: SMTP configuration for team invitation emails ===
+# Local development keeps the console backend by default. For real email delivery, set:
+# VOLLEYPILOT_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+# VOLLEYPILOT_EMAIL_HOST=smtp.your-provider.com
+# VOLLEYPILOT_EMAIL_PORT=587
+# VOLLEYPILOT_EMAIL_USE_TLS=true
+# VOLLEYPILOT_EMAIL_HOST_USER=your-smtp-user
+# VOLLEYPILOT_EMAIL_HOST_PASSWORD=your-smtp-password-or-app-password
+# VOLLEYPILOT_DEFAULT_FROM_EMAIL=VolleyPilot <noreply@your-domain.com>
 EMAIL_BACKEND = os.environ.get('VOLLEYPILOT_EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = os.environ.get('VOLLEYPILOT_EMAIL_HOST', 'localhost')
 EMAIL_PORT = int(os.environ.get('VOLLEYPILOT_EMAIL_PORT', '25'))
@@ -171,7 +180,9 @@ EMAIL_HOST_USER = os.environ.get('VOLLEYPILOT_EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('VOLLEYPILOT_EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.environ.get('VOLLEYPILOT_EMAIL_USE_TLS', 'false').lower() in {'1', 'true', 'yes', 'on'}
 EMAIL_USE_SSL = os.environ.get('VOLLEYPILOT_EMAIL_USE_SSL', 'false').lower() in {'1', 'true', 'yes', 'on'}
+EMAIL_TIMEOUT = int(os.environ.get('VOLLEYPILOT_EMAIL_TIMEOUT', '10'))
 DEFAULT_FROM_EMAIL = os.environ.get('VOLLEYPILOT_DEFAULT_FROM_EMAIL', 'noreply@volleypilot.local')
+# === NEW ADDITION END: SMTP configuration for team invitation emails ===
 
 # Keep legacy AutoField IDs to match existing migrations/schema.
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'

@@ -44,6 +44,21 @@
             {% endif %}
         </div>
 
+        <!-- === NEW ADDITION START: Coach timeout countdown timer === -->
+        <div class="card" id="timeoutTimerPanel" style="margin-bottom:20px;display:none;border-left:5px solid #d97706;">
+            <div style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;">
+                <div>
+                    <h3 style="margin-bottom:6px;">Timeout Timer</h3>
+                    <div id="timeoutTimerMeta" style="font-size:13px;color:#64748b;">Starts automatically when a coach timeout is called.</div>
+                </div>
+                <div id="timeoutTimerClock" style="font-size:44px;font-weight:800;color:#92400e;letter-spacing:1px;">01:00</div>
+            </div>
+            <div style="height:10px;background:#fef3c7;border-radius:999px;overflow:hidden;margin-top:14px;">
+                <div id="timeoutTimerBar" style="height:100%;width:100%;background:#f59e0b;transition:width .25s linear;"></div>
+            </div>
+        </div>
+        <!-- === NEW ADDITION END: Coach timeout countdown timer === -->
+
         <div class="card" style="margin-bottom:20px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
                 <h3>Rotation Preview</h3>
@@ -271,19 +286,27 @@
 </div>
 {% endif %}
 
-<div id="fullscreenCourt" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.9);z-index:1200;align-items:center;justify-content:center;padding:24px;">
-    <div class="card" style="width:min(900px,100%);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-            <h3 style="margin:0;">Fullscreen Court View</h3>
+<!-- === NEW ADDITION START: Fullscreen volleyball court overlay === -->
+<div id="fullscreenCourt" role="dialog" aria-modal="true" aria-label="Fullscreen volleyball court" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.94);z-index:1200;align-items:center;justify-content:center;padding:24px;">
+    <div class="card" id="fullscreenCourtCard" style="width:min(1100px,100%);max-height:95vh;overflow:auto;background:#f8fafc;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+            <div>
+                <h3 style="margin:0;">Fullscreen Court View</h3>
+                <div style="font-size:13px;color:#64748b;margin-top:4px;">Players remain synced with the saved live rotation state.</div>
+            </div>
             <button class="btn btn-secondary" type="button" onclick="closeFullscreenCourt()">Close</button>
         </div>
         <div id="fullscreenCourtGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;"></div>
     </div>
 </div>
+<!-- === NEW ADDITION END: Fullscreen volleyball court overlay === -->
 
 {{ lineup_json|json_script:"lineup-json" }}
 {{ bench_json|json_script:"bench-json" }}
 {{ players_json|json_script:"players-json" }}
+<!-- === NEW ADDITION START: initial timeout timer payload === -->
+{{ active_timeout_json|json_script:"active-timeout-json" }}
+<!-- === NEW ADDITION END: initial timeout timer payload === -->
 
 {% endblock %}
 
@@ -300,6 +323,14 @@ let benchState = JSON.parse(document.getElementById('bench-json').textContent ||
 let courtContrastEnabled = localStorage.getItem(COURT_CONTRAST_KEY) === '1';
 const players = JSON.parse(document.getElementById('players-json').textContent || '[]');
 const playerMap = Object.fromEntries(players.map(player => [String(player.pk), player]));
+
+// === NEW ADDITION START: timeout timer and real-time refresh state ===
+const INITIAL_TIMEOUT_STATE = JSON.parse(document.getElementById('active-timeout-json').textContent || '{}');
+const TIMEOUT_DURATION_SECONDS = {{ timeout_duration_seconds|default:60 }};
+let timeoutInterval = null;
+let timeoutEndsAtMs = null;
+let liveStatePollInterval = null;
+// === NEW ADDITION END: timeout timer and real-time refresh state ===
 
 function readQueue() {
   try {
@@ -456,6 +487,67 @@ function renderParticipation(rows) {
   }
 }
 
+// === NEW ADDITION START: Coach timeout countdown UI ===
+function formatTimeoutClock(seconds) {
+  const safeSeconds = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+}
+
+function clearTimeoutTimer() {
+  if (timeoutInterval) {
+    clearInterval(timeoutInterval);
+    timeoutInterval = null;
+  }
+  timeoutEndsAtMs = null;
+  const panel = document.getElementById('timeoutTimerPanel');
+  if (panel) panel.style.display = 'none';
+}
+
+function renderTimeoutClock(durationSeconds = TIMEOUT_DURATION_SECONDS) {
+  const panel = document.getElementById('timeoutTimerPanel');
+  const clock = document.getElementById('timeoutTimerClock');
+  const meta = document.getElementById('timeoutTimerMeta');
+  const bar = document.getElementById('timeoutTimerBar');
+  if (!panel || !clock || !bar) return;
+
+  const remaining = Math.max(0, Math.ceil((timeoutEndsAtMs - Date.now()) / 1000));
+  panel.style.display = remaining > 0 ? 'block' : 'none';
+  clock.textContent = formatTimeoutClock(remaining);
+  bar.style.width = `${Math.max(0, Math.min(100, (remaining / durationSeconds) * 100))}%`;
+  if (meta) {
+    meta.textContent = remaining > 0
+      ? 'Coach timeout in progress. Timer is synced from the saved timeout action.'
+      : 'Timeout complete.';
+  }
+  if (remaining <= 0) {
+    clearTimeoutTimer();
+  }
+}
+
+function applyTimeoutState(timeoutState) {
+  if (!timeoutState || !timeoutState.active || !timeoutState.ends_at) {
+    clearTimeoutTimer();
+    return;
+  }
+
+  const nextEndsAtMs = Date.parse(timeoutState.ends_at);
+  if (!Number.isFinite(nextEndsAtMs)) {
+    clearTimeoutTimer();
+    return;
+  }
+
+  timeoutEndsAtMs = nextEndsAtMs;
+  renderTimeoutClock(timeoutState.duration_seconds || TIMEOUT_DURATION_SECONDS);
+  if (timeoutInterval) clearInterval(timeoutInterval);
+  timeoutInterval = setInterval(
+    () => renderTimeoutClock(timeoutState.duration_seconds || TIMEOUT_DURATION_SECONDS),
+    250
+  );
+}
+// === NEW ADDITION END: Coach timeout countdown UI ===
+
 function updateState(data) {
   persistState(data);
   document.getElementById('ourScore').textContent = data.our_score;
@@ -466,6 +558,9 @@ function updateState(data) {
   document.getElementById('timeoutsVal').textContent = `Timeouts left: ${data.timeouts_remaining}`;
   document.getElementById('subsVal').textContent = `Subs left: ${data.subs_remaining}/${data.substitution_limit || DEFAULT_SUB_LIMIT}`;
   document.getElementById('techVal').textContent = `Technical TOs: ${data.technical_timeouts}`;
+  // === NEW ADDITION START: update timeout timer from server state ===
+  applyTimeoutState(data.active_timeout);
+  // === NEW ADDITION END: update timeout timer from server state ===
   document.getElementById('currentRun').textContent = data.run_stats.current_run;
   document.getElementById('longestRun').textContent = data.run_stats.longest_run;
   lineupState = data.lineup || lineupState;
@@ -588,8 +683,55 @@ function openLineupModal() { document.getElementById('lineupModal').style.displa
 function closeLineupModal() { document.getElementById('lineupModal').style.display = 'none'; }
 function openSubModal() { document.getElementById('subModal').style.display = 'flex'; }
 function closeSubModal() { document.getElementById('subModal').style.display = 'none'; }
-function openFullscreenCourt() { document.getElementById('fullscreenCourt').style.display = 'flex'; renderCourt('fullscreenCourtGrid'); }
-function closeFullscreenCourt() { document.getElementById('fullscreenCourt').style.display = 'none'; }
+
+// === NEW ADDITION START: Fullscreen court mode with synced positions ===
+function openFullscreenCourt() {
+  const overlay = document.getElementById('fullscreenCourt');
+  overlay.style.display = 'flex';
+  renderCourt('fullscreenCourtGrid');
+  if (overlay.requestFullscreen && !document.fullscreenElement) {
+    overlay.requestFullscreen().catch(() => {
+      // Browser may block native fullscreen; the fixed overlay still works.
+    });
+  }
+}
+
+function closeFullscreenCourt() {
+  const overlay = document.getElementById('fullscreenCourt');
+  overlay.style.display = 'none';
+  if (document.fullscreenElement === overlay && document.exitFullscreen) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+document.addEventListener('fullscreenchange', () => {
+  const overlay = document.getElementById('fullscreenCourt');
+  if (!document.fullscreenElement && overlay && overlay.style.display === 'flex') {
+    overlay.style.display = 'none';
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    closeFullscreenCourt();
+  }
+});
+// === NEW ADDITION END: Fullscreen court mode with synced positions ===
+
+// === NEW ADDITION START: real-time rotation/state refresh ===
+async function refreshLiveState() {
+  if (document.hidden || !navigator.onLine) return;
+  const state = await api(`/matches/${MATCH_ID}/state/`);
+  if (state && state.ok) {
+    updateState(state);
+  }
+}
+
+function startLiveStatePolling() {
+  if (liveStatePollInterval) clearInterval(liveStatePollInterval);
+  liveStatePollInterval = setInterval(refreshLiveState, 3000);
+}
+// === NEW ADDITION END: real-time rotation/state refresh ===
 
 async function saveLineup() {
   const positions = {};
@@ -638,9 +780,19 @@ window.addEventListener('DOMContentLoaded', () => {
     el.checked = (benchState || []).map(String).includes(el.value);
   });
   applyCourtContrast();
+  // === NEW ADDITION START: initialize timeout timer and real-time rotation polling ===
+  applyTimeoutState(INITIAL_TIMEOUT_STATE);
+  startLiveStatePolling();
+  refreshLiveState();
+  // === NEW ADDITION END: initialize timeout timer and real-time rotation polling ===
   updateSyncStatus();
 });
 
-window.addEventListener('online', flushPendingActions);
+window.addEventListener('online', () => {
+  flushPendingActions();
+  // === NEW ADDITION START: refresh saved rotation immediately after reconnect ===
+  refreshLiveState();
+  // === NEW ADDITION END: refresh saved rotation immediately after reconnect ===
+});
 </script>
 {% endblock %}
