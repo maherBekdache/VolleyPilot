@@ -2,7 +2,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import models
+from django.db import models, transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -417,6 +417,7 @@ def live_match_view(request, match_id):
 
 @require_POST
 @login_required
+@transaction.atomic
 def set_lineup(request, match_id):
     team, match = _require_team_match(request, match_id)
     if not team or not request.user.is_staff_role:
@@ -456,11 +457,12 @@ def set_lineup(request, match_id):
             'libero_player_id': libero_player.pk if libero_player else None,
         },
     )
-    return JsonResponse({'ok': True})
+    return JsonResponse(_state_payload(live, include_events=True))
 
 
 @require_POST
 @login_required
+@transaction.atomic
 def record_point(request, match_id):
     team, match = _require_team_match(request, match_id)
     if not team or not request.user.is_staff_role:
@@ -558,9 +560,20 @@ def _end_match(live):
     live.match.status = 'completed'
     live.match.save(update_fields=['status'])
 
+    # VT-107: capture a de-identified training sample when a match finishes.
+    # This is deliberately non-blocking so live scoring remains fast (VT-99).
+    try:
+        from dashboard.ml import upsert_training_sample
+
+        upsert_training_sample(live.match.team, live)
+    except Exception:
+        # Analytics collection must never interrupt match operations.
+        pass
+
 
 @require_POST
 @login_required
+@transaction.atomic
 def manual_rotate(request, match_id):
     team, match = _require_team_match(request, match_id)
     if not team or not request.user.is_staff_role:
@@ -581,11 +594,12 @@ def manual_rotate(request, match_id):
         rotation=live.current_rotation,
         data={'previous_rotation': previous, 'direction': direction},
     )
-    return JsonResponse({'ok': True, 'rotation': live.current_rotation})
+    return JsonResponse(_state_payload(live, include_events=True))
 
 
 @require_POST
 @login_required
+@transaction.atomic
 def make_substitution(request, match_id):
     team, match = _require_team_match(request, match_id)
     if not team or not request.user.is_staff_role:
@@ -634,11 +648,12 @@ def make_substitution(request, match_id):
             'is_libero_swap': is_libero_swap,
         },
     )
-    return JsonResponse({'ok': True, 'subs_remaining': max(0, _substitution_limit(live) - _regular_subs(live))})
+    return JsonResponse(_state_payload(live, include_events=True))
 
 
 @require_POST
 @login_required
+@transaction.atomic
 def call_timeout(request, match_id):
     team, match = _require_team_match(request, match_id)
     if not team or not request.user.is_staff_role:
@@ -654,11 +669,12 @@ def call_timeout(request, match_id):
         rotation=live.current_rotation,
         data={},
     )
-    return JsonResponse({'ok': True, 'timeouts_remaining': remaining - 1})
+    return JsonResponse(_state_payload(live, include_events=True))
 
 
 @require_POST
 @login_required
+@transaction.atomic
 def undo_last_action(request, match_id):
     team, match = _require_team_match(request, match_id)
     if not team or not request.user.is_staff_role:
@@ -733,6 +749,7 @@ def match_state(request, match_id):
 
 @require_POST
 @login_required
+@transaction.atomic
 def tag_last_point(request, match_id):
     team, match = _require_team_match(request, match_id)
     if not team or not request.user.is_staff_role:
@@ -748,7 +765,7 @@ def tag_last_point(request, match_id):
         return JsonResponse({'ok': False, 'error': 'Choose a valid tag.'}, status=400)
     player = Player.objects.filter(pk=player_id, team=team, is_active=True).first() if player_id else None
     ActionTag.objects.create(action=latest_action, tag_type=tag_type, player=player)
-    return JsonResponse({'ok': True, 'label': f"{tag_type.replace('_', ' ').title()} tagged"})
+    return JsonResponse({**_state_payload(live, include_events=True), 'label': f"{tag_type.replace('_', ' ').title()} tagged"})
 
 
 def _state_payload(live, include_events=False, set_over=False, match_over=False):

@@ -158,5 +158,66 @@
       updateBanner();
     })();
     </script>
+    {% if user.is_authenticated %}
+    <script>
+    (function () {
+      const enabledKey = 'volleypilot-browser-alerts-enabled';
+      const lastIdKey = 'volleypilot-browser-alerts-last-id';
+      const feedUrl = "{% url 'notification_feed' %}";
+
+      async function requestBrowserPermission() {
+        if (!('Notification' in window)) return 'unsupported';
+        if (Notification.permission === 'granted') return 'granted';
+        if (Notification.permission === 'denied') return 'denied';
+        return await Notification.requestPermission();
+      }
+
+      async function checkBrowserNotifications(initial = false) {
+        if (localStorage.getItem(enabledKey) !== '1') return;
+        const lastId = Number(localStorage.getItem(lastIdKey) || '0');
+        try {
+          const response = await fetch(`${feedUrl}?after=${lastId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+          const data = await response.json();
+          if (!data.ok) return;
+          if (data.latest_id) localStorage.setItem(lastIdKey, String(data.latest_id));
+          if (initial || !('Notification' in window) || Notification.permission !== 'granted') return;
+          [...data.notifications].reverse().forEach((item) => {
+            const notification = new Notification(item.title || 'VolleyPilot update', {
+              body: item.body || 'Open VolleyPilot to view the update.',
+              tag: `volleypilot-${item.id}`,
+            });
+            if (item.link) {
+              notification.onclick = () => {
+                window.focus();
+                window.location.href = item.link;
+              };
+            }
+          });
+        } catch (error) {
+          // Polling errors are non-blocking; the in-app notification page still works.
+        }
+      }
+
+      window.enableVolleyPilotBrowserAlerts = async function () {
+        const status = document.getElementById('browserAlertStatus');
+        const permission = await requestBrowserPermission();
+        if (permission !== 'granted') {
+          if (status) status.textContent = permission === 'unsupported'
+            ? 'This browser does not support desktop notifications.'
+            : 'Browser notification permission was not granted.';
+          return;
+        }
+        localStorage.setItem(enabledKey, '1');
+        await checkBrowserNotifications(true);
+        if (status) status.textContent = 'Browser alerts are enabled for future VolleyPilot notifications.';
+      };
+
+      if (localStorage.getItem(enabledKey) === '1') {
+        checkBrowserNotifications(true);
+        window.setInterval(() => checkBrowserNotifications(false), 30000);
+      }
+    })();
+    </script>
+    {% endif %}
 </body>
 </html>

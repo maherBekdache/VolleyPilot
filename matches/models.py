@@ -34,6 +34,7 @@ class SetScore(models.Model):
     class Meta:
         unique_together = ['live_match', 'set_number']
         ordering = ['set_number']
+        indexes = [models.Index(fields=['live_match', 'set_number'], name='setscore_live_set_idx')]
 
     def __str__(self):
         return f"Set {self.set_number}: {self.our_score}-{self.opponent_score}"
@@ -62,6 +63,11 @@ class Action(models.Model):
 
     class Meta:
         ordering = ['timestamp']
+        indexes = [
+            models.Index(fields=['live_match', 'set_number', 'action_type'], name='action_live_set_type_idx'),
+            models.Index(fields=['live_match', 'timestamp'], name='action_live_time_idx'),
+            models.Index(fields=['live_match', 'rotation'], name='action_live_rotation_idx'),
+        ]
 
     def __str__(self):
         return f"{self.action_type} at {self.timestamp}"
@@ -81,6 +87,12 @@ class ActionTag(models.Model):
     action = models.ForeignKey(Action, on_delete=models.CASCADE, related_name='tags')
     tag_type = models.CharField(max_length=20, choices=TAG_CHOICES)
     player = models.ForeignKey('teams.Player', on_delete=models.CASCADE, null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['tag_type'], name='actiontag_type_idx'),
+            models.Index(fields=['player', 'tag_type'], name='actiontag_player_type_idx'),
+        ]
 
     def __str__(self):
         return f"{self.tag_type} by {self.player}"

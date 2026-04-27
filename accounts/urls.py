@@ -10,6 +10,7 @@ urlpatterns = [
     path('profile/password/', views.password_change_view, name='password_change'),
     path('roles/', views.manage_roles_view, name='manage_roles'),
     path('notifications/', views.notifications_view, name='notifications'),
+    path('notifications/feed/', views.notification_feed_view, name='notification_feed'),
     path('password-reset/', auth_views.PasswordResetView.as_view(
         template_name='registration/password_reset_form.html',
         email_template_name='registration/password_reset_email.html',

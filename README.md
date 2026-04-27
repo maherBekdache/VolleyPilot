@@ -102,3 +102,45 @@ rm db.sqlite3
 python manage.py migrate
 python manage.py seed_data
 ```
+
+## AI, Analytics, Security, and Notifications Additions
+
+The project now includes the requested VolleyPilot task additions:
+
+| Ticket | Implementation |
+|--------|----------------|
+| VT-107 | Completed matches generate anonymized ML training samples with hashed team/opponent IDs and no player names, emails, usernames, jersey numbers, or notes. Coaches can export the dataset from Smart Analytics. |
+| VT-106 | Smart Analytics includes heuristic predictive match analytics for the next scheduled match, including win probability, confidence, season record, sideout rate, and training sample count. |
+| VT-105 | Opponent insights summarize historical record, suggested tactics, and optional specific-opponent analysis. |
+| VT-104 | Training recommendations are generated from rotation losses and tagged actions such as serve errors, attack errors, digs, and kills. |
+| VT-103 | Rotation loss pattern detection highlights rotations where lost-point share is highest. |
+| VT-102 | `/dashboard/ai-analytics/` centralizes predictive analytics, rotation trends, opponent scouting, training recommendations, dataset export, and the Volypilot chatbot. |
+| VT-100 | Added responsive AI dashboard, notification, and live-match styles for desktop and tablet layouts. |
+| VT-99 | Live match actions now return the updated state payload directly, reducing extra browser round trips; database indexes were added for live action lookups. |
+| VT-98 | Production HTTPS/security headers are configurable, cookies are hardened, and analytics samples can be stored in encrypted form when a storage key is provided. |
+| VT-91 | In-app notifications now include optional browser alerts through a lightweight authenticated notification feed. |
+
+### Volypilot AI chatbot
+
+Volypilot works without an API key by returning local heuristic insights. To connect it to an OpenAI-compatible chat-completions model, set these environment variables before running Django:
+
+```bash
+export VOLLEYPILOT_AI_API_KEY="your-api-key"
+export VOLLEYPILOT_AI_MODEL="gpt-4o-mini"
+# Optional if using another compatible provider:
+export VOLLEYPILOT_AI_API_URL="https://api.openai.com/v1/chat/completions"
+```
+
+The API key stays server-side in Django settings and is not exposed in the browser.
+
+### Production/security environment variables
+
+```bash
+export VOLLEYPILOT_DEBUG=false
+export VOLLEYPILOT_SECRET_KEY="replace-with-a-long-secret"
+export VOLLEYPILOT_ALLOWED_HOSTS="your-domain.com,www.your-domain.com"
+export VOLLEYPILOT_CSRF_TRUSTED_ORIGINS="https://your-domain.com,https://www.your-domain.com"
+export VOLLEYPILOT_STORAGE_ENCRYPTION_KEY="replace-with-a-long-random-key"
+```
+
+When `VOLLEYPILOT_DEBUG=false`, Django enables HTTPS redirect, secure cookies, and HSTS. For local development, keep `VOLLEYPILOT_DEBUG=true` or leave it unset.

@@ -7,6 +7,16 @@
         <h2 style="margin:0;">Notifications</h2>
     </div>
 
+    <div class="browser-alert-card">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+            <div>
+                <strong>Browser push alerts</strong>
+                <div id="browserAlertStatus" style="font-size:13px;color:#64748b;margin-top:4px;">Enable desktop alerts for new match, practice, and announcement notifications.</div>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="enableVolleyPilotBrowserAlerts()">Enable Browser Alerts</button>
+        </div>
+    </div>
+
     {% if notifications %}
         {% for notif in notifications %}
         <div style="background:#1e293b; border-radius:10px; padding:16px 20px; margin-bottom:12px;

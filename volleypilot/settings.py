@@ -21,18 +21,38 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-=jwq6z78u&g#ru7!y^ieo%u=h$5#k58^j_m1*oce(q^&a@s^3r'
+SECRET_KEY = os.environ.get(
+    'VOLLEYPILOT_SECRET_KEY',
+    'django-insecure-=jwq6z78u&g#ru7!y^ieo%u=h$5#k58^j_m1*oce(q^&a@s^3r',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('VOLLEYPILOT_DEBUG', 'true').lower() in {'1', 'true', 'yes', 'on'}
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver"]
+ALLOWED_HOSTS = os.environ.get(
+    'VOLLEYPILOT_ALLOWED_HOSTS',
+    '127.0.0.1,localhost,testserver',
+).split(',')
 
 # Security hardening (VT-98)
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 SECURE_REFERRER_POLICY = 'same-origin'
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_TRUSTED_ORIGINS = [origin for origin in os.environ.get('VOLLEYPILOT_CSRF_TRUSTED_ORIGINS', '').split(',') if origin]
+
+# Optional storage encryption key used by the analytics sample store (VT-98).
+VOLLEYPILOT_STORAGE_ENCRYPTION_KEY = os.environ.get('VOLLEYPILOT_STORAGE_ENCRYPTION_KEY', '')
+
+# Optional server-side AI model configuration for Volypilot. The key is never sent to the browser.
+VOLLEYPILOT_AI_API_KEY = os.environ.get('VOLLEYPILOT_AI_API_KEY', '')
+VOLLEYPILOT_AI_API_URL = os.environ.get('VOLLEYPILOT_AI_API_URL', 'https://api.openai.com/v1/chat/completions')
+VOLLEYPILOT_AI_MODEL = os.environ.get('VOLLEYPILOT_AI_MODEL', 'gpt-4o-mini')
+VOLLEYPILOT_AI_TIMEOUT_SECONDS = int(os.environ.get('VOLLEYPILOT_AI_TIMEOUT_SECONDS', '12'))
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = True

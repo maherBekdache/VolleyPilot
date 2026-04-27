@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
 from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -118,3 +119,31 @@ def notifications_view(request):
     notifications = request.user.notifications.all()[:50]
     request.user.notifications.filter(is_read=False).update(is_read=True)
     return render(request, 'accounts/notifications.html', {'notifications': notifications})
+
+
+@login_required
+def notification_feed_view(request):
+    """Lightweight browser-notification feed used by the frontend poller (VT-91)."""
+    try:
+        after_id = int(request.GET.get('after', '0') or '0')
+    except ValueError:
+        after_id = 0
+    notifications = request.user.notifications.filter(id__gt=after_id).order_by('-created_at')[:8]
+    rows = [
+        {
+            'id': notif.id,
+            'title': notif.title,
+            'body': notif.body,
+            'type': notif.notif_type,
+            'link': notif.link,
+            'created_at': notif.created_at.isoformat(),
+        }
+        for notif in notifications
+    ]
+    latest_id = max([row['id'] for row in rows], default=after_id)
+    return JsonResponse({
+        'ok': True,
+        'latest_id': latest_id,
+        'unread_count': request.user.notifications.filter(is_read=False).count(),
+        'notifications': rows,
+    })
