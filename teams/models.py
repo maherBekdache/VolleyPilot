@@ -88,3 +88,17 @@ class TeamMembership(models.Model):
     def __str__(self):
         return f"{self.user} - {self.team.name} ({self.role})"
 
+
+class TeamAnnouncement(models.Model):
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='announcements')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.team.name}: {self.title}"
+

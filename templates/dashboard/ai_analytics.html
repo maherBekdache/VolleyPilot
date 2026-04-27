@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Smart Analytics - VolleyPilot{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Smart Analytics</h2>
+    <p>Experimental intelligence layer for tactical patterns, recommendations, opponent insights, and predictive planning.</p>
+</div>
+
+<div class="card" style="margin-bottom:24px;border-left:4px solid #3b82f6;">
+    <h3 style="margin-bottom:8px;">Lost Point Pattern Detection</h3>
+    <p style="color:#64748b;margin-bottom:12px;">{{ rotation_note }}</p>
+    <table class="stats-table">
+        <thead>
+            <tr>
+                <th>Rotation</th>
+                <th>Lost Points</th>
+                <th>Total Tracked Rallies</th>
+                <th>Loss %</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rotation_rows %}
+            <tr>
+                <td>R{{ row.rotation }}</td>
+                <td>{{ row.lost_points }}</td>
+                <td>{{ row.total_points }}</td>
+                <td>{{ row.loss_pct }}%</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">No rotation action data available yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card" style="margin-bottom:24px;border-left:4px solid #8b5cf6;">
+    <h3 style="margin-bottom:8px;">Training Recommendations</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+        {% for rec in recommendations %}
+        <div style="padding:12px 14px;background:#f8fafc;border-radius:10px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+                <strong>{{ rec.title }}</strong>
+                <span class="badge {% if rec.priority == 'High' %}badge-danger{% elif rec.priority == 'Medium' %}badge-warning{% else %}badge-primary{% endif %}">{{ rec.priority }}</span>
+            </div>
+            <div style="font-size:14px;color:#475569;margin-top:6px;">{{ rec.detail }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:24px;border-left:4px solid #0ea5e9;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+        <h3 style="margin:0;">Opponent Analysis Insights</h3>
+        <form method="get" style="display:flex;align-items:center;gap:8px;">
+            <label for="opponentFilter" style="font-size:13px;color:#64748b;">View:</label>
+            <select id="opponentFilter" name="opponent" onchange="this.form.submit()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;">
+                <option value="general" {% if selected_opponent == 'general' %}selected{% endif %}>General</option>
+                {% for opp in opponent_options %}
+                <option value="{{ opp }}" {% if selected_opponent == opp %}selected{% endif %}>{{ opp }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    {% if selected_opponent == 'general' %}
+    <p style="color:#64748b;margin-bottom:12px;">{{ opponent_note }}</p>
+    <table class="stats-table">
+        <thead>
+            <tr>
+                <th>Opponent</th>
+                <th>Matches</th>
+                <th>W-L</th>
+                <th>Win %</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in opponent_rows %}
+            <tr>
+                <td>{{ row.opponent }}</td>
+                <td>{{ row.matches }}</td>
+                <td>{{ row.wins }}-{{ row.losses }}</td>
+                <td>{{ row.win_pct }}%</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">No completed opponent history available yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        {% if opponent_specific %}
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px;">
+            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
+                <div style="font-size:12px;color:#64748b;">Record vs {{ opponent_specific.opponent }}</div>
+                <div style="font-size:24px;font-weight:700;">{{ opponent_specific.wins }}-{{ opponent_specific.losses }}</div>
+            </div>
+            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
+                <div style="font-size:12px;color:#64748b;">Matches Played</div>
+                <div style="font-size:24px;font-weight:700;">{{ opponent_specific.matches }}</div>
+            </div>
+            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
+                <div style="font-size:12px;color:#64748b;">Win Rate</div>
+                <div style="font-size:24px;font-weight:700;">{{ opponent_specific.win_rate }}%</div>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
+                <strong>Rally Win %</strong>
+                <div style="font-size:20px;margin-top:6px;">{{ opponent_specific.rally_win_pct }}%</div>
+            </div>
+            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
+                <strong>Sideout %</strong>
+                <div style="font-size:20px;margin-top:6px;">{{ opponent_specific.sideout_pct }}%</div>
+            </div>
+            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
+                <strong>Worst Rotation</strong>
+                <div style="font-size:20px;margin-top:6px;">{{ opponent_specific.worst_rotation }}</div>
+            </div>
+            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
+                <strong>Serve / Attack Errors</strong>
+                <div style="font-size:20px;margin-top:6px;">{{ opponent_specific.serve_errors }} / {{ opponent_specific.attack_errors }}</div>
+            </div>
+        </div>
+        {% else %}
+        <div style="color:#64748b;">No completed matches found for this opponent.</div>
+        {% endif %}
+    {% endif %}
+</div>
+
+<div class="card" style="border-left:4px solid #f59e0b;">
+    <h3 style="margin-bottom:8px;">Anonymized Data Collection for ML Training</h3>
+    <p style="color:#64748b;margin-bottom:12px;">
+        {{ dataset_preview_count }} anonymized completed-match samples are currently available. Export contains no player names, emails, or direct identifiers.
+    </p>
+    <a href="{% url 'export_anonymized_dataset' %}" class="btn btn-primary">Download Anonymized Dataset (JSON)</a>
+</div>
+{% endblock %}

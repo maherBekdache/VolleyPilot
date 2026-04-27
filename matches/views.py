@@ -25,8 +25,11 @@ def _require_team_match(request, match_id):
 
 
 def _get_live(match_id):
-    match = get_object_or_404(Match, pk=match_id)
-    live = get_object_or_404(LiveMatch, match=match)
+    match = get_object_or_404(Match.objects.select_related('team'), pk=match_id)
+    live = get_object_or_404(
+        LiveMatch.objects.select_related('match__team', 'libero_player'),
+        match=match,
+    )
     return match, live
 
 
@@ -749,12 +752,71 @@ def tag_last_point(request, match_id):
 
 
 def _state_payload(live, include_events=False, set_over=False, match_over=False):
+    # Prefetch all non-undone actions once to avoid redundant queries (VT-99)
+    all_actions = list(live.actions.filter(is_undone=False).order_by('timestamp'))
     players = _team_players(live)
     _sync_participation(live, players)
     set_score = _current_set_score(live)
     our_sets, their_sets = _sets_won(live)
-    _, timeouts_remaining = _get_timeouts(live)
     participation_rows = _participation_totals(live, players)
+
+    # Count timeouts/subs/technical TOs from prefetched list
+    current_set = live.current_set
+    timeouts_used = sum(
+        1 for a in all_actions
+        if a.action_type == 'timeout' and a.set_number == current_set
+    )
+    timeouts_remaining = max(0, 2 - timeouts_used)
+    technical_timeouts = sum(
+        1 for a in all_actions
+        if a.action_type == 'technical_timeout' and a.set_number == current_set
+    )
+    subs_used = sum(
+        1 for a in all_actions
+        if a.action_type == 'substitution' and a.set_number == current_set
+        and not (a.data or {}).get('is_libero_swap')
+    )
+
+    # Inline rotation stats (VT-99 — avoid separate DB round-trip)
+    point_actions = [
+        a for a in all_actions
+        if a.action_type in ('point_won', 'point_lost', 'sideout')
+    ]
+    overall_so_won = overall_so_chances = 0
+    by_rotation = []
+    for rotation in range(1, 7):
+        ra = [a for a in point_actions if a.rotation == rotation]
+        won = sum(1 for a in ra if a.action_type in ('point_won', 'sideout'))
+        lost = sum(1 for a in ra if a.action_type == 'point_lost')
+        so_won = sum(
+            1 for a in ra
+            if not a.data.get('our_serve', True) and a.action_type in ('point_won', 'sideout')
+        )
+        so_chances = sum(1 for a in ra if not a.data.get('our_serve', True))
+        overall_so_won += so_won
+        overall_so_chances += so_chances
+        by_rotation.append({
+            'rotation': rotation, 'won': won, 'lost': lost,
+            'net': won - lost,
+            'sideout_pct': round(so_won / so_chances * 100) if so_chances else 0,
+        })
+    rotation_metrics = {
+        'by_rotation': by_rotation,
+        'overall_sideout_pct': round(overall_so_won / overall_so_chances * 100)
+        if overall_so_chances else 0,
+    }
+
+    # Inline run stats
+    current_run = longest_run = 0
+    for a in point_actions:
+        if a.action_type in ('point_won', 'sideout'):
+            current_run += 1
+            longest_run = max(longest_run, current_run)
+        else:
+            current_run = 0
+    run_stats = {'current_run': current_run, 'longest_run': longest_run}
+
+    sub_limit = _substitution_limit(live)
     payload = {
         'ok': True,
         'our_score': set_score.our_score,
@@ -764,24 +826,28 @@ def _state_payload(live, include_events=False, set_over=False, match_over=False)
         'current_set': live.current_set,
         'our_sets': our_sets,
         'their_sets': their_sets,
-        'subs_remaining': max(0, _substitution_limit(live) - _regular_subs(live)),
-        'substitution_limit': _substitution_limit(live),
+        'subs_remaining': max(0, sub_limit - subs_used),
+        'substitution_limit': sub_limit,
         'timeouts_remaining': timeouts_remaining,
-        'technical_timeouts': _get_technical_timeouts(live),
+        'technical_timeouts': technical_timeouts,
         'is_active': live.is_active,
         'lineup': live.lineup,
         'bench': live.bench,
         'first_server': live.first_server,
         'libero_player_id': live.libero_player_id,
-        'rotation_metrics': _live_rotation_stats(live),
-        'run_stats': _run_stats(live),
+        'rotation_metrics': rotation_metrics,
+        'run_stats': run_stats,
         'participation_totals': _participation_payload(participation_rows[:6]),
         'set_over': set_over,
         'match_over': match_over,
     }
     if include_events:
+        recent = all_actions[-10:]
         payload['events'] = [
-            {'label': _get_action_label(action, players), 'timestamp': action.timestamp.strftime('%H:%M:%S')}
-            for action in live.actions.filter(is_undone=False).order_by('-timestamp')[:10]
+            {
+                'label': _get_action_label(a, players),
+                'timestamp': a.timestamp.strftime('%H:%M:%S'),
+            }
+            for a in reversed(recent)
         ]
     return payload

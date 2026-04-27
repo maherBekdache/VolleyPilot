@@ -26,6 +26,10 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.global-status-banner[hidden] {
+    display: none !important;
+}
+
 .status-meta {
     font-size: 13px;
     color: #cbd5e1;
@@ -46,7 +50,7 @@ body {
     flex-direction: column;
     position: fixed;
     height: 100vh;
-    overflow-y: auto;
+    overflow: hidden;
 }
 
 .sidebar-header {
@@ -62,6 +66,8 @@ body {
 .sidebar-nav {
     flex: 1;
     padding: 20px 0;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .nav-item {
@@ -553,7 +559,36 @@ tbody tr:hover {
     border-bottom: 1px solid #e2e8f0;
 }
 
-/* Responsive */
+/* Responsive — Tablet (VT-100) */
+@media (max-width: 1024px) {
+    .sidebar {
+        width: 220px;
+    }
+
+    .main-content {
+        margin-left: 220px;
+        padding: 24px 20px;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .player-grid {
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    }
+
+    /* Collapse live-match two-column into single column on tablet */
+    .live-match-grid-2col {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Responsive — Mobile */
 @media (max-width: 768px) {
     .sidebar {
         width: 200px;
@@ -561,7 +596,7 @@ tbody tr:hover {
 
     .main-content {
         margin-left: 200px;
-        padding: 20px;
+        padding: 16px;
     }
 
     .stats-grid {
@@ -570,22 +605,6 @@ tbody tr:hover {
 
     .dashboard-grid {
         grid-template-columns: 1fr;
-    }
-}
-
-@media (max-width: 640px) {
-    .sidebar {
-        position: relative;
-        width: 100%;
-        height: auto;
-    }
-
-    .main-content {
-        margin-left: 0;
-    }
-
-    .nav-item span:not(.icon) {
-        display: none;
     }
 }
 
@@ -1447,4 +1466,160 @@ tbody tr:hover {
 
 .court-fullscreen-overlay.open { display: flex; }
 
-body.hc { filter: contrast(1.4); }
+/* High contrast mode without CSS filter (filters can break fixed positioning) */
+body.hc {
+    background-color: #e2e8f0;
+    color: #0f172a;
+}
+body.hc .sidebar {
+    background-color: #0f172a;
+}
+body.hc .nav-item {
+    color: #e2e8f0;
+}
+body.hc .nav-item.active {
+    color: #f8fafc;
+    background-color: rgba(59, 130, 246, 0.35);
+}
+body.hc .card,
+body.hc .stat-card,
+body.hc .table-container {
+    border: 1px solid #94a3b8;
+}
+
+/* Responsive — Small Mobile */
+@media (max-width: 640px) {
+    .sidebar {
+        position: relative;
+        width: 100%;
+        height: auto;
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+
+    .nav-item span:not(.icon) {
+        display: none;
+    }
+}
+
+/* Color-blind accessibility palettes (profile setting) */
+body.cb-protanopia .btn-success,
+body.cb-deuteranopia .btn-success,
+body.cb-tritanopia .btn-success {
+    color: #fff;
+}
+
+/* Protanopia: blue + amber */
+body.cb-protanopia .btn-success { background: #2563eb; border-color: #1d4ed8; }
+body.cb-protanopia .btn-success:hover { background: #1d4ed8; }
+body.cb-protanopia .btn-danger { background: #d97706; border-color: #b45309; color: #fff; }
+body.cb-protanopia .btn-danger:hover { background: #b45309; }
+body.cb-protanopia .badge-success,
+body.cb-protanopia .badge-home { background: #dbeafe; color: #1e40af; }
+body.cb-protanopia .badge-danger,
+body.cb-protanopia .badge-away { background: #fef3c7; color: #92400e; }
+body.cb-protanopia .cal-dot.practice { background: #2563eb; }
+body.cb-protanopia .cal-dot.match { background: #d97706; }
+body.cb-protanopia .result-win { background: #dbeafe; color: #1e40af; }
+body.cb-protanopia .result-loss { background: #fef3c7; color: #92400e; }
+
+/* Deuteranopia: indigo + orange */
+body.cb-deuteranopia .btn-success { background: #4338ca; border-color: #3730a3; }
+body.cb-deuteranopia .btn-success:hover { background: #3730a3; }
+body.cb-deuteranopia .btn-danger { background: #ea580c; border-color: #c2410c; color: #fff; }
+body.cb-deuteranopia .btn-danger:hover { background: #c2410c; }
+body.cb-deuteranopia .badge-success,
+body.cb-deuteranopia .badge-home { background: #e0e7ff; color: #312e81; }
+body.cb-deuteranopia .badge-danger,
+body.cb-deuteranopia .badge-away { background: #ffedd5; color: #9a3412; }
+body.cb-deuteranopia .cal-dot.practice { background: #4338ca; }
+body.cb-deuteranopia .cal-dot.match { background: #ea580c; }
+body.cb-deuteranopia .result-win { background: #e0e7ff; color: #312e81; }
+body.cb-deuteranopia .result-loss { background: #ffedd5; color: #9a3412; }
+
+/* Tritanopia: violet + lime */
+body.cb-tritanopia .btn-success { background: #7c3aed; border-color: #6d28d9; }
+body.cb-tritanopia .btn-success:hover { background: #6d28d9; }
+body.cb-tritanopia .btn-danger { background: #65a30d; border-color: #4d7c0f; color: #fff; }
+body.cb-tritanopia .btn-danger:hover { background: #4d7c0f; }
+body.cb-tritanopia .badge-success,
+body.cb-tritanopia .badge-home { background: #ede9fe; color: #5b21b6; }
+body.cb-tritanopia .badge-danger,
+body.cb-tritanopia .badge-away { background: #ecfccb; color: #3f6212; }
+body.cb-tritanopia .cal-dot.practice { background: #7c3aed; }
+body.cb-tritanopia .cal-dot.match { background: #65a30d; }
+body.cb-tritanopia .result-win { background: #ede9fe; color: #5b21b6; }
+body.cb-tritanopia .result-loss { background: #ecfccb; color: #3f6212; }
+
+body.cb-protanopia .sidebar,
+body.cb-deuteranopia .sidebar,
+body.cb-tritanopia .sidebar {
+    border-right: 3px solid #0ea5e9;
+}
+body.cb-protanopia .nav-item.active,
+body.cb-deuteranopia .nav-item.active,
+body.cb-tritanopia .nav-item.active {
+    border-left-color: #0ea5e9;
+    background: rgba(14, 165, 233, 0.18);
+}
+
+/* Make active color-blind mode clearly visible on all pages */
+body.cb-protanopia,
+body.cb-deuteranopia,
+body.cb-tritanopia {
+    background: #eef2f7;
+}
+body.cb-protanopia .main-content,
+body.cb-deuteranopia .main-content,
+body.cb-tritanopia .main-content {
+    background: transparent;
+}
+body.cb-protanopia .page-header h2,
+body.cb-deuteranopia .page-header h2,
+body.cb-tritanopia .page-header h2 {
+    text-decoration: underline;
+    text-underline-offset: 5px;
+}
+body.cb-protanopia .card,
+body.cb-protanopia .stat-card,
+body.cb-protanopia .table-container,
+body.cb-deuteranopia .card,
+body.cb-deuteranopia .stat-card,
+body.cb-deuteranopia .table-container,
+body.cb-tritanopia .card,
+body.cb-tritanopia .stat-card,
+body.cb-tritanopia .table-container {
+    border-top: 4px solid;
+}
+
+/* Protanopia globals */
+body.cb-protanopia .btn-primary { background: #2563eb; border-color: #1d4ed8; }
+body.cb-protanopia .btn-primary:hover { background: #1d4ed8; }
+body.cb-protanopia .btn-secondary { background: #d97706; border-color: #b45309; color: #fff; }
+body.cb-protanopia .btn-secondary:hover { background: #b45309; }
+body.cb-protanopia .page-header h2 { color: #1d4ed8; }
+body.cb-protanopia .card,
+body.cb-protanopia .stat-card,
+body.cb-protanopia .table-container { border-top-color: #2563eb; }
+
+/* Deuteranopia globals */
+body.cb-deuteranopia .btn-primary { background: #4338ca; border-color: #3730a3; }
+body.cb-deuteranopia .btn-primary:hover { background: #3730a3; }
+body.cb-deuteranopia .btn-secondary { background: #ea580c; border-color: #c2410c; color: #fff; }
+body.cb-deuteranopia .btn-secondary:hover { background: #c2410c; }
+body.cb-deuteranopia .page-header h2 { color: #312e81; }
+body.cb-deuteranopia .card,
+body.cb-deuteranopia .stat-card,
+body.cb-deuteranopia .table-container { border-top-color: #4338ca; }
+
+/* Tritanopia globals */
+body.cb-tritanopia .btn-primary { background: #7c3aed; border-color: #6d28d9; }
+body.cb-tritanopia .btn-primary:hover { background: #6d28d9; }
+body.cb-tritanopia .btn-secondary { background: #65a30d; border-color: #4d7c0f; color: #fff; }
+body.cb-tritanopia .btn-secondary:hover { background: #4d7c0f; }
+body.cb-tritanopia .page-header h2 { color: #5b21b6; }
+body.cb-tritanopia .card,
+body.cb-tritanopia .stat-card,
+body.cb-tritanopia .table-container { border-top-color: #7c3aed; }

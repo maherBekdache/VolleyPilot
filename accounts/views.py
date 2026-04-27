@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from .forms import RegistrationForm, ProfileForm, RoleAssignmentForm
+from .forms import RegistrationForm, ProfileForm, RoleAssignmentForm, AccessibilitySettingsForm
 from .models import User
 
 
@@ -36,49 +36,63 @@ def register_view(request):
 
 @login_required
 def profile_view(request):
-    pw_errors = []
-
     if request.method == 'POST':
         form_type = request.POST.get('form_type', 'profile')
-
-        # VT-22: Profile information update
         if form_type == 'profile':
-            form = ProfileForm(request.POST, instance=request.user)
-            if form.is_valid():
-                user = form.save(commit=False)
-                # Keep username in sync with email
+            profile_form = ProfileForm(request.POST, instance=request.user)
+            accessibility_form = AccessibilitySettingsForm(instance=request.user)
+            if profile_form.is_valid():
+                user = profile_form.save(commit=False)
                 user.username = user.email
                 user.save()
                 messages.success(request, 'Profile updated successfully.')
                 return redirect('profile')
-
-        # VT-23: Password change
-        elif form_type == 'password':
-            old_password = request.POST.get('old_password', '')
-            new_password1 = request.POST.get('new_password1', '')
-            new_password2 = request.POST.get('new_password2', '')
-
-            if not request.user.check_password(old_password):
-                pw_errors.append('Current password is incorrect.')
-            elif len(new_password1) < 8:
-                pw_errors.append('New password must be at least 8 characters.')
-            elif new_password1 != new_password2:
-                pw_errors.append('New passwords do not match.')
-            else:
-                request.user.set_password(new_password1)
-                request.user.save()
-                # Keep the user logged in after password change
-                update_session_auth_hash(request, request.user)
-                messages.success(request, 'Password changed successfully.')
+        elif form_type == 'accessibility':
+            profile_form = ProfileForm(instance=request.user)
+            accessibility_form = AccessibilitySettingsForm(request.POST, instance=request.user)
+            if accessibility_form.is_valid():
+                accessibility_form.save()
+                messages.success(request, 'Accessibility settings updated.')
                 return redirect('profile')
-
-            form = ProfileForm(instance=request.user)
         else:
-            form = ProfileForm(instance=request.user)
+            profile_form = ProfileForm(instance=request.user)
+            accessibility_form = AccessibilitySettingsForm(instance=request.user)
     else:
-        form = ProfileForm(instance=request.user)
+        profile_form = ProfileForm(instance=request.user)
+        accessibility_form = AccessibilitySettingsForm(instance=request.user)
 
-    return render(request, 'accounts/profile.html', {'form': form, 'pw_errors': pw_errors})
+    return render(
+        request,
+        'accounts/profile.html',
+        {
+            'form': profile_form,
+            'accessibility_form': accessibility_form,
+        },
+    )
+
+
+@login_required
+def password_change_view(request):
+    pw_errors = []
+    if request.method == 'POST':
+        old_password = request.POST.get('old_password', '')
+        new_password1 = request.POST.get('new_password1', '')
+        new_password2 = request.POST.get('new_password2', '')
+
+        if not request.user.check_password(old_password):
+            pw_errors.append('Current password is incorrect.')
+        elif len(new_password1) < 8:
+            pw_errors.append('New password must be at least 8 characters.')
+        elif new_password1 != new_password2:
+            pw_errors.append('New passwords do not match.')
+        else:
+            request.user.set_password(new_password1)
+            request.user.save()
+            update_session_auth_hash(request, request.user)
+            messages.success(request, 'Password changed successfully.')
+            return redirect('profile')
+
+    return render(request, 'accounts/password_change.html', {'pw_errors': pw_errors})
 
 
 @login_required
@@ -96,3 +110,11 @@ def manage_roles_view(request):
             messages.success(request, f'Role updated for {user.get_full_name()}.')
             return redirect('manage_roles')
     return render(request, 'accounts/manage_roles.html', {'users': users})
+
+
+@login_required
+def notifications_view(request):
+    from .models import Notification
+    notifications = request.user.notifications.all()[:50]
+    request.user.notifications.filter(is_read=False).update(is_read=True)
+    return render(request, 'accounts/notifications.html', {'notifications': notifications})

@@ -1,11 +1,13 @@
 import json
+import hashlib
 from django.shortcuts import render, redirect
+from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from datetime import timedelta
 from io import BytesIO
 from teams.views import get_user_team
-from teams.models import Player, Team
+from teams.models import Player, Team, TeamAnnouncement
 from schedule.models import Match, Practice, AvailabilityResponse
 from matches.models import LiveMatch, Action, ActionTag, SetScore
 from django.db.models import Count, Q, Sum, F
@@ -109,6 +111,7 @@ def dashboard_view(request):
             'pct': round(won / total * 100) if total else 0,
         })
     strongest_rotation = max(rotation_summary, key=lambda item: item['pct'], default=None)
+    recent_announcements = TeamAnnouncement.objects.filter(team=team).order_by('-created_at')[:3]
 
     return render(request, 'dashboard/index.html', {
         'team': team,
@@ -124,7 +127,448 @@ def dashboard_view(request):
         'rotation_summary': rotation_summary,
         'strongest_rotation': strongest_rotation,
         'calendar_events_json': json.dumps(calendar_events),
+        'recent_announcements': recent_announcements,
     })
+
+
+def _completed_team_lives(team):
+    return LiveMatch.objects.filter(
+        match__team=team,
+        match__status='completed',
+    ).select_related('match').prefetch_related('set_scores')
+
+
+def _win_loss_for_live(live):
+    our_sets = live.set_scores.filter(is_complete=True, our_score__gt=F('opponent_score')).count()
+    their_sets = live.set_scores.filter(is_complete=True, opponent_score__gt=F('our_score')).count()
+    return our_sets, their_sets, our_sets > their_sets
+
+
+def _rotation_loss_patterns(team):
+    losses_by_rotation = {rot: 0 for rot in range(1, 7)}
+    totals_by_rotation = {rot: 0 for rot in range(1, 7)}
+
+    actions = Action.objects.filter(
+        live_match__match__team=team,
+        is_undone=False,
+        action_type__in=['point_won', 'sideout', 'point_lost'],
+        rotation__in=[1, 2, 3, 4, 5, 6],
+    )
+    for action in actions:
+        rot = action.rotation
+        totals_by_rotation[rot] += 1
+        if action.action_type == 'point_lost':
+            losses_by_rotation[rot] += 1
+
+    rows = []
+    for rot in range(1, 7):
+        total = totals_by_rotation[rot]
+        losses = losses_by_rotation[rot]
+        loss_pct = round((losses / total) * 100, 1) if total else 0.0
+        rows.append({
+            'rotation': rot,
+            'lost_points': losses,
+            'total_points': total,
+            'loss_pct': loss_pct,
+        })
+    rows.sort(key=lambda x: (x['loss_pct'], x['lost_points']), reverse=True)
+
+    top = rows[0] if rows else None
+    pattern_note = 'No action data yet.'
+    if top and top['total_points'] > 0:
+        pattern_note = (
+            f"Rotation {top['rotation']} has the highest loss share "
+            f"({top['loss_pct']}% across {top['total_points']} tracked rallies)."
+        )
+    return rows, pattern_note
+
+
+def _training_recommendations(team, rotation_rows):
+    recs = []
+    worst = rotation_rows[0] if rotation_rows else None
+    if worst and worst['loss_pct'] >= 55 and worst['total_points'] >= 10:
+        recs.append({
+            'title': f"Rotation {worst['rotation']} stabilization",
+            'detail': (
+                'Run serve-receive reps starting from this rotation, followed by first-ball '
+                'sideout drills under time pressure.'
+            ),
+            'priority': 'High',
+        })
+
+    tags = ActionTag.objects.filter(action__live_match__match__team=team)
+    serve_errors = tags.filter(tag_type='serve_error').count()
+    attack_errors = tags.filter(tag_type='attack_error').count()
+    digs = tags.filter(tag_type='dig').count()
+    kills = tags.filter(tag_type='kill').count()
+
+    if serve_errors >= max(6, kills // 2):
+        recs.append({
+            'title': 'Serving consistency block',
+            'detail': 'Add a 15-minute zone-serving ladder with miss penalties and recovery routine.',
+            'priority': 'High',
+        })
+    if attack_errors >= max(6, kills // 2):
+        recs.append({
+            'title': 'High-ball decision training',
+            'detail': 'Use constrained scrimmage where hitters must choose roll/line/hand tools over low-percentage swings.',
+            'priority': 'Medium',
+        })
+    if digs <= max(8, kills // 3):
+        recs.append({
+            'title': 'Backcourt reaction and platform control',
+            'detail': 'Schedule repetitive dig channels and blocker-touch read drills twice weekly.',
+            'priority': 'Medium',
+        })
+
+    if not recs:
+        recs.append({
+            'title': 'Maintain current training cycle',
+            'detail': 'No major statistical weakness detected yet; keep balanced technical and tactical sessions.',
+            'priority': 'Low',
+        })
+
+    return recs
+
+
+def _opponent_insights(team):
+    lives = list(_completed_team_lives(team))
+    by_opp = {}
+    for live in lives:
+        opp = (live.match.opponent or '').strip() or 'Unknown Opponent'
+        bucket = by_opp.setdefault(opp, {'wins': 0, 'losses': 0, 'matches': 0})
+        _, _, won = _win_loss_for_live(live)
+        bucket['matches'] += 1
+        if won:
+            bucket['wins'] += 1
+        else:
+            bucket['losses'] += 1
+
+    rows = []
+    for opp, stats in by_opp.items():
+        matches = stats['matches']
+        win_pct = round((stats['wins'] / matches) * 100) if matches else 0
+        rows.append({
+            'opponent': opp,
+            'matches': matches,
+            'wins': stats['wins'],
+            'losses': stats['losses'],
+            'win_pct': win_pct,
+        })
+    rows.sort(key=lambda r: r['matches'], reverse=True)
+
+    top = rows[0] if rows else None
+    note = 'No completed opponent history yet.'
+    if top:
+        note = (
+            f"Most faced opponent: {top['opponent']} ({top['wins']}-{top['losses']}, "
+            f"{top['win_pct']}% win rate)."
+        )
+    return rows, note
+
+
+def _specific_opponent_analytics(team, opponent_name):
+    lives = _completed_team_lives(team).filter(match__opponent__iexact=opponent_name)
+    lives = list(lives)
+    if not lives:
+        return None
+
+    wins = losses = 0
+    action_won = action_lost = 0
+    sideout_won = sideout_chances = 0
+    errors = {'serve_error': 0, 'attack_error': 0}
+    rotation_losses = {r: 0 for r in range(1, 7)}
+
+    for live in lives:
+        _, _, won = _win_loss_for_live(live)
+        wins += 1 if won else 0
+        losses += 0 if won else 1
+
+        actions = Action.objects.filter(
+            live_match=live,
+            is_undone=False,
+            action_type__in=['point_won', 'sideout', 'point_lost'],
+        )
+        for a in actions:
+            if a.action_type in ('point_won', 'sideout'):
+                action_won += 1
+            elif a.action_type == 'point_lost':
+                action_lost += 1
+                if a.rotation in rotation_losses:
+                    rotation_losses[a.rotation] += 1
+
+            our_serve = (a.data or {}).get('our_serve', True)
+            if not our_serve:
+                sideout_chances += 1
+                if a.action_type in ('point_won', 'sideout'):
+                    sideout_won += 1
+
+        tags = ActionTag.objects.filter(action__live_match=live)
+        errors['serve_error'] += tags.filter(tag_type='serve_error').count()
+        errors['attack_error'] += tags.filter(tag_type='attack_error').count()
+
+    matches = len(lives)
+    win_pct = round((wins / matches) * 100) if matches else 0
+    total_rallies = action_won + action_lost
+    rally_win_pct = round((action_won / total_rallies) * 100, 1) if total_rallies else 0.0
+    sideout_pct = round((sideout_won / sideout_chances) * 100, 1) if sideout_chances else 0.0
+
+    worst_rotation = max(rotation_losses.items(), key=lambda item: item[1])
+    worst_rotation_label = f"R{worst_rotation[0]}" if worst_rotation[1] > 0 else 'N/A'
+
+    return {
+        'opponent': opponent_name,
+        'matches': matches,
+        'wins': wins,
+        'losses': losses,
+        'win_rate': win_pct,
+        'rally_win_pct': rally_win_pct,
+        'sideout_pct': sideout_pct,
+        'serve_errors': errors['serve_error'],
+        'attack_errors': errors['attack_error'],
+        'worst_rotation': worst_rotation_label,
+    }
+
+
+def _predictive_summary(team, opponent_rows):
+    # Future-feature style prediction heuristic (VT-106)
+    lives = list(_completed_team_lives(team))
+    wins = 0
+    losses = 0
+    for live in lives:
+        _, _, won = _win_loss_for_live(live)
+        wins += 1 if won else 0
+        losses += 0 if won else 1
+    total = wins + losses
+
+    sideout_actions = Action.objects.filter(
+        live_match__match__team=team,
+        is_undone=False,
+        action_type__in=['point_won', 'sideout', 'point_lost'],
+    )
+    so_chances = 0
+    so_wins = 0
+    for a in sideout_actions:
+        our_serve = (a.data or {}).get('our_serve', True)
+        if not our_serve:
+            so_chances += 1
+            if a.action_type in ('point_won', 'sideout'):
+                so_wins += 1
+    sideout_pct = (so_wins / so_chances * 100) if so_chances else 50.0
+
+    base = 0.5
+    if total:
+        base += ((wins - losses) / total) * 0.22
+    base += ((sideout_pct - 50.0) / 50.0) * 0.18
+
+    next_match = team.matches.filter(status='scheduled', date__gte=timezone.now().date()).order_by('date', 'time').first()
+    if next_match:
+        row = next((r for r in opponent_rows if r['opponent'].lower() == next_match.opponent.lower()), None)
+        if row and row['matches']:
+            base += ((row['wins'] - row['losses']) / row['matches']) * 0.12
+
+    probability = max(0.05, min(0.95, base))
+    confidence = 'Low'
+    if total >= 8:
+        confidence = 'Medium'
+    if total >= 16:
+        confidence = 'High'
+
+    return {
+        'next_match': next_match,
+        'win_probability_pct': round(probability * 100, 1),
+        'confidence': confidence,
+        'inputs': {
+            'total_completed_matches': total,
+            'season_record': f'{wins}-{losses}',
+            'overall_sideout_pct': round(sideout_pct, 1),
+        },
+    }
+
+
+def _get_opponent_public_profile(opponent_name):
+    """
+    Retrieve public profile data for an opponent team (heights, stats).
+    Returns dict with opponent_stats or empty dict if team not found.
+    """
+    try:
+        opponent_team = Team.objects.filter(name__iexact=opponent_name.strip()).first()
+        if not opponent_team:
+            return {}
+        
+        active_players = opponent_team.players.filter(is_active=True)
+        player_count = active_players.count()
+        
+        # Calculate average height from players with height data
+        heights_data = [p.height for p in active_players if p.height and p.height.strip()]
+        avg_height = None
+        if heights_data:
+            try:
+                # Parse heights like "6'2"" or "6'2\"" and convert to inches for averaging
+                total_inches = 0
+                valid_heights = 0
+                for h in heights_data:
+                    # Simple parsing: try to extract numeric values
+                    h = h.replace('"', '').replace("'", "").strip()
+                    if h:
+                        try:
+                            # Assume format "6'2" -> split and parse
+                            parts = h.split()
+                            if len(parts) >= 1:
+                                feet_val = float(parts[0])
+                                inches_val = float(parts[1]) if len(parts) > 1 else 0
+                                total_inches += (feet_val * 12 + inches_val)
+                                valid_heights += 1
+                        except (ValueError, IndexError):
+                            pass
+                
+                if valid_heights > 0:
+                    avg_inches = total_inches / valid_heights
+                    avg_feet = int(avg_inches // 12)
+                    avg_inches_remainder = int(avg_inches % 12)
+                    avg_height = f"{avg_feet}'{avg_inches_remainder}\""
+            except Exception:
+                # If height parsing fails, just skip avg_height
+                pass
+        
+        # Opponent team stats (overall record, player composition)
+        completed_matches = opponent_team.matches.filter(status='completed')
+        opp_wins = 0
+        opp_losses = 0
+        for m in completed_matches:
+            live = getattr(m, 'live', None)
+            if live:
+                our_sets = live.set_scores.filter(is_complete=True, our_score__gt=F('opponent_score')).count()
+                their_sets = live.set_scores.filter(is_complete=True, opponent_score__gt=F('our_score')).count()
+                if our_sets > their_sets:
+                    opp_wins += 1
+                else:
+                    opp_losses += 1
+        
+        return {
+            'player_count': player_count,
+            'avg_height': avg_height,
+            'overall_wins': opp_wins,
+            'overall_losses': opp_losses,
+            'positions': list(active_players.values_list('position', flat=True).distinct()),
+        }
+    except Exception:
+        return {}
+
+
+def _anonymized_dataset(team):
+    lives = list(_completed_team_lives(team))
+    rows = []
+    for live in lives:
+        match = live.match
+        our_sets, their_sets, won = _win_loss_for_live(live)
+        actions = Action.objects.filter(live_match=live, is_undone=False)
+        tags = ActionTag.objects.filter(action__live_match=live)
+
+        action_counts = {}
+        for action in actions:
+            action_counts[action.action_type] = action_counts.get(action.action_type, 0) + 1
+
+        rotation_losses = {str(r): 0 for r in range(1, 7)}
+        for action in actions.filter(action_type='point_lost', rotation__in=[1, 2, 3, 4, 5, 6]):
+            rotation_losses[str(action.rotation)] += 1
+
+        tag_counts = {}
+        for tag in tags:
+            tag_counts[tag.tag_type] = tag_counts.get(tag.tag_type, 0) + 1
+
+        opponent_hash = hashlib.sha256((match.opponent or '').strip().lower().encode('utf-8')).hexdigest()[:12]
+        sample_id = hashlib.sha256(f'{team.id}-{match.id}-{match.date.isoformat()}'.encode('utf-8')).hexdigest()[:16]
+        
+        # Get opponent public profile for ML context
+        opponent_profile = _get_opponent_public_profile(match.opponent)
+
+        rows.append({
+            'sample_id': sample_id,
+            'opponent_hash': opponent_hash,
+            'opponent_public_profile': opponent_profile,
+            'is_home': bool(match.is_home),
+            'ruleset': match.ruleset,
+            'season_week': int(match.date.isocalendar().week),
+            'our_sets': our_sets,
+            'their_sets': their_sets,
+            'won': bool(won),
+            'action_counts': action_counts,
+            'rotation_losses': rotation_losses,
+            'tag_counts': tag_counts,
+        })
+
+    return {
+        'generated_at': timezone.now().isoformat(),
+        'team_hash': hashlib.sha256(f'team-{team.id}'.encode('utf-8')).hexdigest()[:12],
+        'samples': rows,
+        'total_samples': len(rows),
+        'schema': {
+            'privacy': 'No player names, emails, or direct identifiers included',
+            'format': 'JSON',
+            'opponent_profile_fields': {
+                'player_count': 'Number of active players on opponent team',
+                'avg_height': 'Average height of opponent team players',
+                'overall_wins': 'Total wins by opponent team',
+                'overall_losses': 'Total losses by opponent team',
+                'positions': 'List of unique positions on opponent team',
+            },
+        },
+    }
+
+
+@login_required
+def ai_analytics_view(request):
+    team = get_user_team(request.user)
+    if request.user.role not in ('coach', 'assistant'):
+        return redirect('dashboard')
+    if not team or request.user.is_fan_role:
+        if request.user.is_staff_role:
+            return redirect('team_create')
+        return render(request, 'teams/no_team.html')
+
+    rotation_rows, rotation_note = _rotation_loss_patterns(team)
+    recommendations = _training_recommendations(team, rotation_rows)
+    opponent_rows, opponent_note = _opponent_insights(team)
+    predictive = _predictive_summary(team, opponent_rows)
+    dataset_preview = _anonymized_dataset(team)
+
+    selected_opponent = (request.GET.get('opponent') or 'general').strip()
+    opponent_options = [row['opponent'] for row in opponent_rows]
+    if selected_opponent != 'general' and selected_opponent not in opponent_options:
+        selected_opponent = 'general'
+
+    opponent_specific = None
+    if selected_opponent != 'general':
+        opponent_specific = _specific_opponent_analytics(team, selected_opponent)
+
+    return render(request, 'dashboard/ai_analytics.html', {
+        'team': team,
+        'rotation_rows': rotation_rows,
+        'rotation_note': rotation_note,
+        'recommendations': recommendations,
+        'opponent_rows': opponent_rows,
+        'opponent_note': opponent_note,
+        'predictive': predictive,
+        'dataset_preview_count': dataset_preview['total_samples'],
+        'opponent_options': opponent_options,
+        'selected_opponent': selected_opponent,
+        'opponent_specific': opponent_specific,
+    })
+
+
+@login_required
+def export_anonymized_dataset(request):
+    team = get_user_team(request.user)
+    if request.user.role not in ('coach', 'assistant'):
+        return redirect('dashboard')
+    if not team or request.user.is_fan_role:
+        return redirect('dashboard')
+
+    payload = _anonymized_dataset(team)
+    response = HttpResponse(json.dumps(payload, indent=2), content_type='application/json')
+    response['Content-Disposition'] = 'attachment; filename="anonymized_match_data.json"'
+    return response
 
 
 @login_required

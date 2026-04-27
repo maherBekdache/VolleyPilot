@@ -130,6 +130,15 @@ def match_create_view(request):
             match.team = team
             match.created_by = request.user
             match.save()
+            # Notify team members (VT-92)
+            from teams.notifications import notify_team
+            notify_team(
+                team,
+                title=f"New match scheduled: {match.display_title} vs {match.opponent}",
+                body=f"{match.date.strftime('%b %d')} at {match.location}",
+                notif_type='match',
+                link='/schedule/',
+            )
             messages.success(request, 'Match event created successfully.')
             return redirect('schedule')
     else:
@@ -186,6 +195,15 @@ def practice_create_view(request):
             practice.team = team
             practice.created_by = request.user
             practice.save()
+            # Notify team members (VT-92)
+            from teams.notifications import notify_team
+            notify_team(
+                team,
+                title=f"Practice scheduled: {practice.focus}",
+                body=f"{practice.date.strftime('%b %d')} at {practice.time.strftime('%I:%M %p')} \u2014 {practice.location}",
+                notif_type='practice',
+                link='/schedule/',
+            )
             messages.success(request, 'Practice session created.')
             return redirect('schedule')
     else:
