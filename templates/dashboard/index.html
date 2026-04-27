@@ -145,6 +145,45 @@
             {% endfor %}
         </div>
     </div>
+
+    <div class="card">
+        <h3>Team Performance Snapshot</h3>
+        {% if strongest_rotation %}
+        <div style="margin-bottom:12px;color:#64748b;">Strongest rotation so far: <strong style="color:#1e293b;">Rotation {{ strongest_rotation.rotation }}</strong> at {{ strongest_rotation.pct }}%</div>
+        {% endif %}
+        <div style="display:flex;flex-direction:column;gap:8px;">
+            {% for row in rotation_summary %}
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fafc;border-radius:10px;">
+                <strong>Rotation {{ row.rotation }}</strong>
+                <span>{{ row.won }} won / {{ row.lost }} lost</span>
+                <span>{{ row.pct }}%</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if recent_announcements %}
+    <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="margin:0;">Team Announcements</h3>
+            {% if user.is_staff_role %}
+            <a href="{% url 'create_announcement' %}" class="btn btn-primary" style="font-size:13px;padding:6px 14px;">+ Post</a>
+            {% endif %}
+        </div>
+        {% for ann in recent_announcements %}
+        <div style="padding:12px 0;{% if not forloop.last %}border-bottom:1px solid #e2e8f0;{% endif %}">
+            <div style="font-weight:600;font-size:14px;color:#1e293b;">{{ ann.title }}</div>
+            <div style="color:#64748b;font-size:13px;margin-top:4px;">{{ ann.body|truncatewords:20 }}</div>
+            <div style="color:#94a3b8;font-size:12px;margin-top:4px;">{{ ann.created_at|date:"M d, H:i" }} — {{ ann.author.get_full_name|default:ann.author.email }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% elif user.is_staff_role %}
+    <div class="card" style="text-align:center;">
+        <p style="color:#64748b;margin:0 0 12px;">No announcements yet.</p>
+        <a href="{% url 'create_announcement' %}" class="btn btn-primary">Post First Announcement</a>
+    </div>
+    {% endif %}
 </div>
 
 <script>

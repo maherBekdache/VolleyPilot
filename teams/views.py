@@ -265,3 +265,24 @@ def accept_invite_view(request, token):
             messages.info(request, 'Invitation declined.')
         return redirect('dashboard')
     return render(request, 'teams/accept_invite.html', {'invite': invite, 'email_matches': email_matches})
+
+
+@login_required
+def create_announcement_view(request):
+    from .models import TeamAnnouncement
+    from .notifications import notify_team
+    team = get_user_team(request.user)
+    if not team or not request.user.is_staff_role:
+        messages.error(request, 'Only staff can post announcements.')
+        return redirect('dashboard')
+    if request.method == 'POST':
+        title = request.POST.get('title', '').strip()
+        body = request.POST.get('body', '').strip()
+        if not title or not body:
+            messages.error(request, 'Title and body are required.')
+        else:
+            TeamAnnouncement.objects.create(team=team, author=request.user, title=title, body=body)
+            notify_team(team, title=f"Announcement: {title}", body=body, notif_type='announcement', link='/schedule/')
+            messages.success(request, 'Announcement sent to your team.')
+            return redirect('dashboard')
+    return render(request, 'teams/announcement_form.html', {'team': team})

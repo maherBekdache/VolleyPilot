@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Notifications — VolleyPilot{% endblock %}
+
+{% block content %}
+<div style="max-width: 700px; margin: 0 auto;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
+        <h2 style="margin:0;">Notifications</h2>
+    </div>
+
+    {% if notifications %}
+        {% for notif in notifications %}
+        <div style="background:#1e293b; border-radius:10px; padding:16px 20px; margin-bottom:12px;
+                    border-left:4px solid
+                    {% if notif.notif_type == 'match' %}#3b82f6
+                    {% elif notif.notif_type == 'practice' %}#22c55e
+                    {% else %}#f59e0b{% endif %};">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                <div>
+                    <div style="font-weight:600; color:#f1f5f9; font-size:15px;">{{ notif.title }}</div>
+                    {% if notif.body %}
+                    <div style="color:#94a3b8; font-size:13px; margin-top:4px;">{{ notif.body }}</div>
+                    {% endif %}
+                </div>
+                <div style="color:#64748b; font-size:12px; white-space:nowrap;">
+                    {{ notif.created_at|date:"M d, H:i" }}
+                </div>
+            </div>
+            {% if notif.link %}
+            <a href="{{ notif.link }}" style="display:inline-block; margin-top:8px; font-size:12px; color:#3b82f6; text-decoration:none;">View →</a>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="background:#1e293b; border-radius:10px; padding:40px; text-align:center; color:#64748b;">
+            No notifications yet.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

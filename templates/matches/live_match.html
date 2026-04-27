@@ -16,7 +16,7 @@
     </div>
 </div>
 
-<div class="dashboard-grid" style="grid-template-columns:1.35fr .95fr;align-items:start;">
+<div class="dashboard-grid live-match-grid-2col" style="grid-template-columns:1.35fr .95fr;align-items:start;">
     <div>
         <div class="card" style="background:#0f172a;color:#fff;margin-bottom:20px;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
@@ -63,9 +63,9 @@
         <div class="card" style="margin-bottom:20px;">
             <h3>Live Controls</h3>
             <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-                <button type="button" class="btn btn-success" style="padding:16px;" onclick="recordPoint(true)">+ Point Our Team</button>
-                <button type="button" class="btn btn-success" style="padding:16px;" onclick="recordPoint(true, 'sideout')">+ Sideout</button>
-                <button type="button" class="btn btn-danger" style="padding:16px;" onclick="recordPoint(false)">+ Point Opponent</button>
+                <button type="button" class="btn btn-success" style="padding:16px;" onclick="recordPoint(true)" aria-label="Record point for our team">+ Point Our Team</button>
+                <button type="button" class="btn btn-success" style="padding:16px;" onclick="recordPoint(true, 'sideout')" aria-label="Record sideout point for our team">+ Sideout</button>
+                <button type="button" class="btn btn-danger" style="padding:16px;" onclick="recordPoint(false)" aria-label="Record point for opponent">+ Point Opponent</button>
                 <button type="button" class="btn btn-primary" style="padding:16px;" onclick="callTimeout()">Coach Timeout</button>
                 <button type="button" class="btn btn-secondary" style="padding:16px;" onclick="openSubModal()">Bench / Libero Swap</button>
             </div>

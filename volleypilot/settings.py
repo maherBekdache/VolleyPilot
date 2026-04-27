@@ -28,6 +28,19 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver"]
 
+# Security hardening (VT-98)
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
 
 # Application definition
 
@@ -68,6 +81,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'accounts.context_processors.unread_notifications',
             ],
         },
     },
@@ -138,3 +152,6 @@ EMAIL_HOST_PASSWORD = os.environ.get('VOLLEYPILOT_EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.environ.get('VOLLEYPILOT_EMAIL_USE_TLS', 'false').lower() in {'1', 'true', 'yes', 'on'}
 EMAIL_USE_SSL = os.environ.get('VOLLEYPILOT_EMAIL_USE_SSL', 'false').lower() in {'1', 'true', 'yes', 'on'}
 DEFAULT_FROM_EMAIL = os.environ.get('VOLLEYPILOT_DEFAULT_FROM_EMAIL', 'noreply@volleypilot.local')
+
+# Keep legacy AutoField IDs to match existing migrations/schema.
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'

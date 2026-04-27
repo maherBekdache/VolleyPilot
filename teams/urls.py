@@ -11,4 +11,5 @@ urlpatterns = [
     path('player/<int:pk>/delete/', views.player_delete_view, name='player_delete'),
     path('invite/', views.invite_view, name='invite'),
     path('invite/<uuid:token>/accept/', views.accept_invite_view, name='accept_invite'),
+    path('announcements/create/', views.create_announcement_view, name='create_announcement'),
 ]

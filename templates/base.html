@@ -5,10 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}VolleyPilot{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=5">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body class="{% if user.is_authenticated and user.high_contrast %}hc{% endif %}{% if user.is_authenticated and user.color_blind_mode != 'off' %} cb cb-{{ user.color_blind_mode }}{% endif %}">
     <div id="globalStatusBanner" class="global-status-banner" hidden>
         <div>
             <strong id="globalStatusTitle">Offline mode</strong>
@@ -59,6 +59,12 @@
                     <span class="icon">Stats</span>
                     <span>Statistics</span>
                 </a>
+                {% if user.role == 'coach' or user.role == 'assistant' %}
+                <a href="{% url 'ai_analytics' %}" class="nav-item {% if request.resolver_match.url_name == 'ai_analytics' %}active{% endif %}">
+                    <span class="icon">Analytics</span>
+                    <span>Smart Analytics</span>
+                </a>
+                {% endif %}
                 {% endif %}
                 {% if not user.is_parent_role and not user.is_fan_role %}
                 <a href="{% url 'drill_list' %}" class="nav-item {% if 'drill' in request.resolver_match.url_name %}active{% endif %}">
@@ -70,22 +76,32 @@
                     <span class="icon">Results</span>
                     <span>Game Results</span>
                 </a>
+                <a href="{% url 'profile' %}" class="nav-item {% if request.resolver_match.url_name == 'profile' or request.resolver_match.url_name == 'password_change' %}active{% endif %}">
+                    <span class="icon">Profile</span>
+                    <span>Profile Settings</span>
+                </a>
+                <a href="{% url 'notifications' %}" class="nav-item {% if request.resolver_match.url_name == 'notifications' %}active{% endif %}">
+                    <span>Notifications{% if unread_notification_count %} <span style="background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px;">{{ unread_notification_count }}</span>{% endif %}</span>
+                </a>
+                {% if user.is_staff_role %}
+                <a href="{% url 'create_announcement' %}" class="nav-item {% if request.resolver_match.url_name == 'create_announcement' %}active{% endif %}">
+                    <span>Announce</span>
+                </a>
+                {% endif %}
             </nav>
             <div style="padding: 20px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: auto;">
-                <div style="color: #94a3b8; font-size: 13px; margin-bottom: 8px;">
-                    {{ user.get_full_name|default:user.email }}
-                </div>
-                <div style="color: #64748b; font-size: 12px; margin-bottom: 12px;">
-                    {{ user.get_role_display }}
-                </div>
-                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                    <button type="button" id="accessibilityToggle" style="background: none; border: none; color: #94a3b8; font-size: 12px; cursor: pointer; padding: 0;">High Contrast</button>
-                    <span style="color: #475569;">|</span>
-                    <a href="{% url 'profile' %}" style="color: #94a3b8; text-decoration: none; font-size: 12px;">Profile</a>
-                    <span style="color: #475569;">|</span>
-                    <form method="post" action="{% url 'logout' %}" style="display: inline; margin: 0; padding: 0;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:14px;">
+                    <div>
+                        <div style="color: #e2e8f0; font-size: 13px; margin-bottom: 6px;">
+                            {{ user.get_full_name|default:user.email }}
+                        </div>
+                        <div style="color: #cbd5e1; font-size: 12px;">
+                            {{ user.get_role_display }}
+                        </div>
+                    </div>
+                    <form method="post" action="{% url 'logout' %}" style="margin: 0;">
                         {% csrf_token %}
-                        <button type="submit" style="background: none; border: none; color: #94a3b8; font-size: 12px; cursor: pointer; padding: 0;">Logout</button>
+                        <button type="submit" style="background: #dc2626; border: 1px solid #b91c1c; color: #ffffff; font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px 12px; border-radius: 8px;">Logout</button>
                     </form>
                 </div>
             </div>
@@ -117,8 +133,6 @@
       const title = document.getElementById('globalStatusTitle');
       const text = document.getElementById('globalStatusText');
       const meta = document.getElementById('globalStatusMeta');
-      const toggle = document.getElementById('accessibilityToggle');
-      const preferenceKey = 'volleypilot-high-contrast';
 
       function updateBanner() {
         const pending = Number(localStorage.getItem('volleypilot-pending-actions') || '0');
@@ -138,17 +152,6 @@
         meta.textContent = pending > 0 ? `${pending} pending action${pending === 1 ? '' : 's'}` : (online ? 'Connected' : 'Connection lost');
       }
 
-      function applyContrast(enabled) {
-        body.classList.toggle('hc', enabled);
-        localStorage.setItem(preferenceKey, enabled ? '1' : '0');
-      }
-
-      if (localStorage.getItem(preferenceKey) === '1') {
-        applyContrast(true);
-      }
-      if (toggle) {
-        toggle.addEventListener('click', () => applyContrast(!body.classList.contains('hc')));
-      }
       window.addEventListener('online', updateBanner);
       window.addEventListener('offline', updateBanner);
       window.addEventListener('storage', updateBanner);

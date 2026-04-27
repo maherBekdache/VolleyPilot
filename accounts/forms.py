@@ -30,3 +30,9 @@ class RoleAssignmentForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ['role']
+
+
+class AccessibilitySettingsForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['high_contrast', 'color_blind_mode']
