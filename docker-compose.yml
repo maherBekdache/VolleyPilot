@@ -1,0 +1,13 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: volleypilot:latest
+    container_name: volleypilot
+    ports:
+      - "8000:8000"
+    environment:
+      VOLLEYPILOT_DEBUG: "true"
+      VOLLEYPILOT_ALLOWED_HOSTS: "127.0.0.1,localhost,testserver,0.0.0.0"
+      VOLLEYPILOT_AUTO_SEED: "true"

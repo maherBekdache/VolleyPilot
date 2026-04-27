@@ -30,6 +30,44 @@ python manage.py runserver
 
 Open **http://127.0.0.1:8000** in your browser.
 
+## Docker Submission
+
+This repo now includes a submission-friendly Docker setup for Moodle.
+
+### Run with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Then open **http://127.0.0.1:8000**.
+
+What happens automatically on container startup:
+
+- Django migrations run
+- Demo data is seeded on first boot if the database is empty
+- The app starts on port `8000`
+
+### Stop the container
+
+```bash
+docker compose down
+```
+
+### Build and run without Compose
+
+```bash
+docker build -t volleypilot .
+docker run --rm -p 8000:8000 volleypilot
+```
+
+### Notes for Moodle
+
+- The container does not rely on your local `.venv`
+- The SQLite database is created inside the container at runtime
+- Demo accounts are recreated automatically if the container starts with an empty database
+- If you do not want demo seeding, run with `VOLLEYPILOT_AUTO_SEED=false`
+
 ## Demo Accounts
 
 | Role      | Email                        | Password   |
