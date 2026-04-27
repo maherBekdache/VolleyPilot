@@ -547,16 +547,14 @@ async function callTimeout() {
   const data = await api(`/matches/${MATCH_ID}/timeout/`, {});
   if (data.queued) return;
   if (!data.ok) return alert(data.error || 'Error');
-  const state = await api(`/matches/${MATCH_ID}/state/`);
-  if (state.ok) updateState(state);
+  updateState(data);
 }
 
 async function rotate(direction) {
   const data = await api(`/matches/${MATCH_ID}/rotate/`, { direction });
   if (data.queued) return;
   if (!data.ok) return alert(data.error || 'Error');
-  const state = await api(`/matches/${MATCH_ID}/state/`);
-  if (state.ok) updateState(state);
+  updateState(data);
 }
 
 async function undoLastAction() {
@@ -608,7 +606,7 @@ async function saveLineup() {
   }
   if (!data.ok) return alert(data.error || 'Error');
   closeLineupModal();
-  location.reload();
+  updateState(data);
 }
 
 async function submitSub() {
@@ -623,7 +621,7 @@ async function submitSub() {
   }
   if (!data.ok) return alert(data.error || 'Error');
   closeSubModal();
-  location.reload();
+  updateState(data);
 }
 
 window.addEventListener('DOMContentLoaded', () => {

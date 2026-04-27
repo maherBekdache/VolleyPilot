@@ -1,44 +1,94 @@
 {% extends "base.html" %}
-{% block title %}Smart Analytics - VolleyPilot{% endblock %}
+{% block title %}AI Analytics - VolleyPilot{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Smart Analytics</h2>
-    <p>Experimental intelligence layer for tactical patterns, recommendations, opponent insights, and predictive planning.</p>
+    <h2>AI Analytics</h2>
+    <p>Central intelligence dashboard for predictions, tactical patterns, opponent insights, recommendations, and Volypilot coaching support.</p>
 </div>
 
-<div class="card" style="margin-bottom:24px;border-left:4px solid #3b82f6;">
+<div class="ai-dashboard-grid" style="margin-bottom:24px;">
+    <div class="card ai-card ai-card-blue">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+                <h3 style="margin-bottom:8px;">Predictive Match Analytics</h3>
+                {% if predictive.next_match %}
+                <p style="color:#64748b;margin:0;">Next match: <strong>{{ team.name }}</strong> vs <strong>{{ predictive.next_match.opponent }}</strong> on {{ predictive.next_match.date }}.</p>
+                {% else %}
+                <p style="color:#64748b;margin:0;">No upcoming scheduled match found. Add a future match to activate opponent-specific forecasting.</p>
+                {% endif %}
+            </div>
+            <span class="badge {% if predictive.confidence == 'High' %}badge-success{% elif predictive.confidence == 'Medium' %}badge-warning{% else %}badge-primary{% endif %}">{{ predictive.confidence }} confidence</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:16px;">
+            <div class="ai-metric-tile">
+                <div class="ai-metric-label">Projected win probability</div>
+                <div class="ai-metric-value">{{ predictive.win_probability_pct }}%</div>
+            </div>
+            <div class="ai-metric-tile">
+                <div class="ai-metric-label">Season record input</div>
+                <div class="ai-metric-value">{{ predictive.inputs.season_record }}</div>
+            </div>
+            <div class="ai-metric-tile">
+                <div class="ai-metric-label">Sideout input</div>
+                <div class="ai-metric-value">{{ predictive.inputs.overall_sideout_pct }}%</div>
+            </div>
+            <div class="ai-metric-tile">
+                <div class="ai-metric-label">Completed-match samples</div>
+                <div class="ai-metric-value">{{ predictive.inputs.total_completed_matches }}</div>
+            </div>
+        </div>
+        <p style="color:#64748b;font-size:13px;margin-top:12px;">Current forecast uses a transparent heuristic from match results, sideout performance, and opponent history. Volypilot can explain the logic or help plan the next training focus.</p>
+    </div>
+
+    <div class="card ai-card ai-card-purple volypilot-card">
+        <h3 style="margin-bottom:8px;">Volypilot AI Chatbot</h3>
+        <p style="color:#64748b;font-size:14px;margin-bottom:12px;">Ask tactical questions using your rotation, opponent, roster, and player-stat context. If an AI API key is configured, the answer is generated server-side; otherwise Volypilot uses the built-in local insight engine.</p>
+        <div id="volypilotMessages" class="volypilot-messages" aria-live="polite">
+            <div class="volypilot-bubble bot">Hi, I’m Volypilot. Ask me things like “Who should start?”, “Who is the best player from our stats?”, “What rotation should we use?”, or “How should we prepare for the next opponent?”</div>
+        </div>
+        <div class="volypilot-input-row">
+            <input type="text" id="volypilotInput" placeholder="Ask Volypilot..." onkeyup="if(event.key==='Enter')askVolypilot()">
+            <button type="button" class="btn btn-primary" onclick="askVolypilot()">Ask</button>
+        </div>
+        <div id="volypilotSource" style="font-size:12px;color:#64748b;margin-top:8px;"></div>
+    </div>
+</div>
+
+<div class="card ai-card ai-card-cyan" style="margin-bottom:24px;">
     <h3 style="margin-bottom:8px;">Lost Point Pattern Detection</h3>
     <p style="color:#64748b;margin-bottom:12px;">{{ rotation_note }}</p>
-    <table class="stats-table">
-        <thead>
-            <tr>
-                <th>Rotation</th>
-                <th>Lost Points</th>
-                <th>Total Tracked Rallies</th>
-                <th>Loss %</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in rotation_rows %}
-            <tr>
-                <td>R{{ row.rotation }}</td>
-                <td>{{ row.lost_points }}</td>
-                <td>{{ row.total_points }}</td>
-                <td>{{ row.loss_pct }}%</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="4">No rotation action data available yet.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="stats-table-container">
+        <table class="stats-table">
+            <thead>
+                <tr>
+                    <th>Rotation</th>
+                    <th>Lost Points</th>
+                    <th>Total Tracked Rallies</th>
+                    <th>Loss %</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rotation_rows %}
+                <tr>
+                    <td>R{{ row.rotation }}</td>
+                    <td>{{ row.lost_points }}</td>
+                    <td>{{ row.total_points }}</td>
+                    <td>{{ row.loss_pct }}%</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4">No rotation action data available yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
-<div class="card" style="margin-bottom:24px;border-left:4px solid #8b5cf6;">
+<div class="card ai-card ai-card-violet" style="margin-bottom:24px;">
     <h3 style="margin-bottom:8px;">Training Recommendations</h3>
     <div style="display:flex;flex-direction:column;gap:10px;">
         {% for rec in recommendations %}
-        <div style="padding:12px 14px;background:#f8fafc;border-radius:10px;">
+        <div class="ai-rec-row">
             <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
                 <strong>{{ rec.title }}</strong>
                 <span class="badge {% if rec.priority == 'High' %}badge-danger{% elif rec.priority == 'Medium' %}badge-warning{% else %}badge-primary{% endif %}">{{ rec.priority }}</span>
@@ -49,11 +99,11 @@
     </div>
 </div>
 
-<div class="card" style="margin-bottom:24px;border-left:4px solid #0ea5e9;">
+<div class="card ai-card ai-card-sky" style="margin-bottom:24px;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
         <h3 style="margin:0;">Opponent Analysis Insights</h3>
         <form method="get" style="display:flex;align-items:center;gap:8px;">
-            <label for="opponentFilter" style="font-size:13px;color:#64748b;">View:</label>
+            <label for="opponentFilter" style="font-size:13px;color:#64748b;margin:0;">View:</label>
             <select id="opponentFilter" name="opponent" onchange="this.form.submit()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;">
                 <option value="general" {% if selected_opponent == 'general' %}selected{% endif %}>General</option>
                 {% for opp in opponent_options %}
@@ -65,62 +115,52 @@
 
     {% if selected_opponent == 'general' %}
     <p style="color:#64748b;margin-bottom:12px;">{{ opponent_note }}</p>
-    <table class="stats-table">
-        <thead>
-            <tr>
-                <th>Opponent</th>
-                <th>Matches</th>
-                <th>W-L</th>
-                <th>Win %</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in opponent_rows %}
-            <tr>
-                <td>{{ row.opponent }}</td>
-                <td>{{ row.matches }}</td>
-                <td>{{ row.wins }}-{{ row.losses }}</td>
-                <td>{{ row.win_pct }}%</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="4">No completed opponent history available yet.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="stats-table-container">
+        <table class="stats-table">
+            <thead>
+                <tr>
+                    <th>Opponent</th>
+                    <th>Matches</th>
+                    <th>W-L</th>
+                    <th>Win %</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in opponent_rows %}
+                <tr>
+                    <td>{{ row.opponent }}</td>
+                    <td>{{ row.matches }}</td>
+                    <td>{{ row.wins }}-{{ row.losses }}</td>
+                    <td>{{ row.win_pct }}%</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4">No completed opponent history available yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
         {% if opponent_specific %}
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px;">
-            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
-                <div style="font-size:12px;color:#64748b;">Record vs {{ opponent_specific.opponent }}</div>
-                <div style="font-size:24px;font-weight:700;">{{ opponent_specific.wins }}-{{ opponent_specific.losses }}</div>
+            <div class="ai-metric-tile">
+                <div class="ai-metric-label">Record vs {{ opponent_specific.opponent }}</div>
+                <div class="ai-metric-value">{{ opponent_specific.wins }}-{{ opponent_specific.losses }}</div>
             </div>
-            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
-                <div style="font-size:12px;color:#64748b;">Matches Played</div>
-                <div style="font-size:24px;font-weight:700;">{{ opponent_specific.matches }}</div>
+            <div class="ai-metric-tile">
+                <div class="ai-metric-label">Matches Played</div>
+                <div class="ai-metric-value">{{ opponent_specific.matches }}</div>
             </div>
-            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
-                <div style="font-size:12px;color:#64748b;">Win Rate</div>
-                <div style="font-size:24px;font-weight:700;">{{ opponent_specific.win_rate }}%</div>
+            <div class="ai-metric-tile">
+                <div class="ai-metric-label">Win Rate</div>
+                <div class="ai-metric-value">{{ opponent_specific.win_rate }}%</div>
             </div>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
-            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
-                <strong>Rally Win %</strong>
-                <div style="font-size:20px;margin-top:6px;">{{ opponent_specific.rally_win_pct }}%</div>
-            </div>
-            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
-                <strong>Sideout %</strong>
-                <div style="font-size:20px;margin-top:6px;">{{ opponent_specific.sideout_pct }}%</div>
-            </div>
-            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
-                <strong>Worst Rotation</strong>
-                <div style="font-size:20px;margin-top:6px;">{{ opponent_specific.worst_rotation }}</div>
-            </div>
-            <div style="padding:12px;background:#f8fafc;border-radius:10px;">
-                <strong>Serve / Attack Errors</strong>
-                <div style="font-size:20px;margin-top:6px;">{{ opponent_specific.serve_errors }} / {{ opponent_specific.attack_errors }}</div>
-            </div>
+            <div class="ai-rec-row"><strong>Rally Win %</strong><div style="font-size:20px;margin-top:6px;">{{ opponent_specific.rally_win_pct }}%</div></div>
+            <div class="ai-rec-row"><strong>Sideout %</strong><div style="font-size:20px;margin-top:6px;">{{ opponent_specific.sideout_pct }}%</div></div>
+            <div class="ai-rec-row"><strong>Worst Rotation</strong><div style="font-size:20px;margin-top:6px;">{{ opponent_specific.worst_rotation }}</div></div>
+            <div class="ai-rec-row"><strong>Serve / Attack Errors</strong><div style="font-size:20px;margin-top:6px;">{{ opponent_specific.serve_errors }} / {{ opponent_specific.attack_errors }}</div></div>
         </div>
         {% else %}
         <div style="color:#64748b;">No completed matches found for this opponent.</div>
@@ -128,11 +168,55 @@
     {% endif %}
 </div>
 
-<div class="card" style="border-left:4px solid #f59e0b;">
+<div class="card ai-card ai-card-amber">
     <h3 style="margin-bottom:8px;">Anonymized Data Collection for ML Training</h3>
     <p style="color:#64748b;margin-bottom:12px;">
-        {{ dataset_preview_count }} anonymized completed-match samples are currently available. Export contains no player names, emails, or direct identifiers.
+        {{ dataset_preview_count }} anonymized completed-match samples are currently available. Export contains no player names, emails, usernames, notes, or direct identifiers.
     </p>
     <a href="{% url 'export_anonymized_dataset' %}" class="btn btn-primary">Download Anonymized Dataset (JSON)</a>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const VOLYPILOT_URL = "{% url 'volypilot_chat' %}";
+const VOLYPILOT_CSRF = "{{ csrf_token }}";
+
+function appendVolypilotBubble(text, who) {
+  const box = document.getElementById('volypilotMessages');
+  const bubble = document.createElement('div');
+  bubble.className = `volypilot-bubble ${who}`;
+  bubble.textContent = text;
+  box.appendChild(bubble);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function askVolypilot() {
+  const input = document.getElementById('volypilotInput');
+  const source = document.getElementById('volypilotSource');
+  const message = input.value.trim();
+  if (!message) return;
+  appendVolypilotBubble(message, 'user');
+  input.value = '';
+  source.textContent = 'Volypilot is thinking...';
+  try {
+    const response = await fetch(VOLYPILOT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': VOLYPILOT_CSRF },
+      body: JSON.stringify({ message })
+    });
+    const data = await response.json();
+    if (!data.ok) {
+      appendVolypilotBubble(data.error || 'Volypilot could not answer that.', 'bot');
+      source.textContent = '';
+      return;
+    }
+    appendVolypilotBubble(data.reply, 'bot');
+    source.textContent = data.source === 'model' ? 'Answered with configured AI model.' : 'Answered with local Volypilot analytics fallback.';
+  } catch (error) {
+    appendVolypilotBubble('Volypilot could not connect right now. Try again after checking the server.', 'bot');
+    source.textContent = '';
+  }
+}
+</script>
 {% endblock %}

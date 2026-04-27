@@ -1,8 +1,12 @@
 import json
 import hashlib
+import urllib.error
+import urllib.request
 from django.shortcuts import render, redirect
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 from datetime import timedelta
 from io import BytesIO
@@ -11,6 +15,7 @@ from teams.models import Player, Team, TeamAnnouncement
 from schedule.models import Match, Practice, AvailabilityResponse
 from matches.models import LiveMatch, Action, ActionTag, SetScore
 from django.db.models import Count, Q, Sum, F
+from .ml import anonymized_dataset_for_team
 
 
 @login_required
@@ -457,64 +462,7 @@ def _get_opponent_public_profile(opponent_name):
 
 
 def _anonymized_dataset(team):
-    lives = list(_completed_team_lives(team))
-    rows = []
-    for live in lives:
-        match = live.match
-        our_sets, their_sets, won = _win_loss_for_live(live)
-        actions = Action.objects.filter(live_match=live, is_undone=False)
-        tags = ActionTag.objects.filter(action__live_match=live)
-
-        action_counts = {}
-        for action in actions:
-            action_counts[action.action_type] = action_counts.get(action.action_type, 0) + 1
-
-        rotation_losses = {str(r): 0 for r in range(1, 7)}
-        for action in actions.filter(action_type='point_lost', rotation__in=[1, 2, 3, 4, 5, 6]):
-            rotation_losses[str(action.rotation)] += 1
-
-        tag_counts = {}
-        for tag in tags:
-            tag_counts[tag.tag_type] = tag_counts.get(tag.tag_type, 0) + 1
-
-        opponent_hash = hashlib.sha256((match.opponent or '').strip().lower().encode('utf-8')).hexdigest()[:12]
-        sample_id = hashlib.sha256(f'{team.id}-{match.id}-{match.date.isoformat()}'.encode('utf-8')).hexdigest()[:16]
-        
-        # Get opponent public profile for ML context
-        opponent_profile = _get_opponent_public_profile(match.opponent)
-
-        rows.append({
-            'sample_id': sample_id,
-            'opponent_hash': opponent_hash,
-            'opponent_public_profile': opponent_profile,
-            'is_home': bool(match.is_home),
-            'ruleset': match.ruleset,
-            'season_week': int(match.date.isocalendar().week),
-            'our_sets': our_sets,
-            'their_sets': their_sets,
-            'won': bool(won),
-            'action_counts': action_counts,
-            'rotation_losses': rotation_losses,
-            'tag_counts': tag_counts,
-        })
-
-    return {
-        'generated_at': timezone.now().isoformat(),
-        'team_hash': hashlib.sha256(f'team-{team.id}'.encode('utf-8')).hexdigest()[:12],
-        'samples': rows,
-        'total_samples': len(rows),
-        'schema': {
-            'privacy': 'No player names, emails, or direct identifiers included',
-            'format': 'JSON',
-            'opponent_profile_fields': {
-                'player_count': 'Number of active players on opponent team',
-                'avg_height': 'Average height of opponent team players',
-                'overall_wins': 'Total wins by opponent team',
-                'overall_losses': 'Total losses by opponent team',
-                'positions': 'List of unique positions on opponent team',
-            },
-        },
-    }
+    return anonymized_dataset_for_team(team)
 
 
 @login_required
@@ -570,6 +518,118 @@ def export_anonymized_dataset(request):
     response['Content-Disposition'] = 'attachment; filename="anonymized_match_data.json"'
     return response
 
+
+
+def _volypilot_context(team, rotation_rows=None, recommendations=None, opponent_rows=None, predictive=None):
+    rotation_rows = rotation_rows if rotation_rows is not None else _rotation_loss_patterns(team)[0]
+    recommendations = recommendations if recommendations is not None else _training_recommendations(team, rotation_rows)
+    opponent_rows = opponent_rows if opponent_rows is not None else _opponent_insights(team)[0]
+    predictive = predictive if predictive is not None else _predictive_summary(team, opponent_rows)
+    return {
+        'team': team.name,
+        'worst_rotations': rotation_rows[:3],
+        'training_recommendations': recommendations[:5],
+        'opponents': opponent_rows[:5],
+        'predictive_summary': predictive,
+    }
+
+
+def _local_volypilot_reply(message, context):
+    worst = context['worst_rotations'][0] if context['worst_rotations'] else None
+    top_rec = context['training_recommendations'][0] if context['training_recommendations'] else None
+    predictive = context.get('predictive_summary') or {}
+    next_match = predictive.get('next_match')
+    parts = ["Volypilot local insight:"]
+    if worst and worst.get('total_points', 0):
+        parts.append(
+            f"Your biggest current risk is Rotation {worst['rotation']}, with "
+            f"{worst['lost_points']} lost points and a {worst['loss_pct']}% loss share."
+        )
+    else:
+        parts.append("There is not enough tracked rotation data yet, so keep collecting rally actions during live matches.")
+    if top_rec:
+        parts.append(f"Recommended focus: {top_rec['title']} — {top_rec['detail']}")
+    if next_match:
+        parts.append(
+            f"For the next match vs {next_match.opponent}, the heuristic win probability is "
+            f"{predictive['win_probability_pct']}% with {predictive['confidence']} confidence."
+        )
+    if 'opponent' in message.lower() and context['opponents']:
+        opp = context['opponents'][0]
+        parts.append(f"Most useful opponent reference: {opp['opponent']} ({opp['wins']}-{opp['losses']} historical record).")
+    return " ".join(parts)
+
+
+def _call_volypilot_model(message, context):
+    if not settings.VOLLEYPILOT_AI_API_KEY:
+        return _local_volypilot_reply(message, context), 'local'
+
+    payload = {
+        'model': settings.VOLLEYPILOT_AI_MODEL,
+        'temperature': 0.2,
+        'max_tokens': 450,
+        'messages': [
+            {
+                'role': 'system',
+                'content': (
+                    'You are Volypilot, a concise volleyball analytics assistant for coaches. '
+                    'Use only the provided VolleyPilot context. Give tactical, practical, non-medical training guidance. '
+                    'Do not invent player names or personal information.'
+                ),
+            },
+            {
+                'role': 'user',
+                'content': 'Context JSON:\n' + json.dumps(context, default=str) + '\n\nCoach question:\n' + message,
+            },
+        ],
+    }
+    request = urllib.request.Request(
+        settings.VOLLEYPILOT_AI_API_URL,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={
+            'Authorization': f'Bearer {settings.VOLLEYPILOT_AI_API_KEY}',
+            'Content-Type': 'application/json',
+        },
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=settings.VOLLEYPILOT_AI_TIMEOUT_SECONDS) as response:
+            data = json.loads(response.read().decode('utf-8'))
+        reply = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+        return (reply or _local_volypilot_reply(message, context)), 'model'
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="ignore")
+        print("VOLYPILOT GEMINI HTTP ERROR:", exc.code, error_body)
+        return _local_volypilot_reply(message, context), 'local_fallback'
+
+    except Exception as exc:
+        print("VOLYPILOT GEMINI ERROR:", repr(exc))
+        return _local_volypilot_reply(message, context), 'local_fallback'
+
+
+@require_POST
+@login_required
+def volypilot_chat(request):
+    team = get_user_team(request.user)
+    if request.user.role not in ('coach', 'assistant'):
+        return JsonResponse({'ok': False, 'error': 'Permission denied.'}, status=403)
+    if not team or request.user.is_fan_role:
+        return JsonResponse({'ok': False, 'error': 'No team found.'}, status=400)
+    try:
+        body = json.loads(request.body.decode('utf-8') or '{}')
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': 'Invalid JSON.'}, status=400)
+    message = (body.get('message') or '').strip()[:1200]
+    if not message:
+        return JsonResponse({'ok': False, 'error': 'Ask Volypilot a question first.'}, status=400)
+
+    rotation_rows, _ = _rotation_loss_patterns(team)
+    recommendations = _training_recommendations(team, rotation_rows)
+    opponent_rows, _ = _opponent_insights(team)
+    predictive = _predictive_summary(team, opponent_rows)
+    context = _volypilot_context(team, rotation_rows, recommendations, opponent_rows, predictive)
+    reply, source = _call_volypilot_model(message, context)
+    return JsonResponse({'ok': True, 'reply': reply, 'source': source})
 
 @login_required
 def statistics_view(request):
