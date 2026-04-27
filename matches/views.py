@@ -1,4 +1,6 @@
 import json
+import os
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -14,6 +16,11 @@ from teams.views import get_user_team
 from .models import Action, ActionTag, LiveMatch, PlayerParticipation, SetScore
 
 TECHNICAL_TIMEOUT_POINTS = (8, 16)
+
+# === NEW ADDITION START: VT live timeout countdown configuration ===
+# Coach-called timeouts use this duration. Override per environment without changing code.
+TIMEOUT_DURATION_SECONDS = int(os.environ.get('VOLLEYPILOT_TIMEOUT_SECONDS', '60'))
+# === NEW ADDITION END: VT live timeout countdown configuration ===
 
 
 def _require_team_match(request, match_id):
@@ -60,6 +67,67 @@ def _match_win_target(live):
 
 def _rotation_after_sideout(current):
     return (current % 6) + 1
+
+
+# === NEW ADDITION START: realtime saved lineup rotation helpers ===
+def _rotate_lineup_positions(lineup, direction='forward'):
+    """Rotate the saved position->player mapping while keeping existing data shape.
+
+    Forward rotation follows indoor volleyball order:
+    1 -> 6 -> 5 -> 4 -> 3 -> 2 -> 1.
+    The returned dictionary is stored back on LiveMatch.lineup so the court UI,
+    fullscreen court, refreshes, and later requests all see the same rotation.
+    """
+    current = {str(key): value for key, value in (lineup or {}).items()}
+    if not all(str(position) in current for position in range(1, 7)):
+        return current
+
+    if direction == 'back':
+        source_by_new_position = {
+            '1': '6', '2': '1', '3': '2',
+            '4': '3', '5': '4', '6': '5',
+        }
+    else:
+        source_by_new_position = {
+            '1': '2', '2': '3', '3': '4',
+            '4': '5', '5': '6', '6': '1',
+        }
+
+    return {
+        new_position: current[source_position]
+        for new_position, source_position in source_by_new_position.items()
+    }
+
+
+def _timeout_status_payload(live, actions=None):
+    """Return the active timeout countdown state, if a coach timeout is running."""
+    actions = actions if actions is not None else list(
+        live.actions.filter(is_undone=False, set_number=live.current_set).order_by('timestamp')
+    )
+    latest_timeout = next(
+        (
+            action for action in reversed(actions)
+            if action.action_type == 'timeout' and action.set_number == live.current_set
+        ),
+        None,
+    )
+    if not latest_timeout:
+        return None
+
+    duration_seconds = int((latest_timeout.data or {}).get('duration_seconds', TIMEOUT_DURATION_SECONDS))
+    ends_at = latest_timeout.timestamp + timedelta(seconds=duration_seconds)
+    remaining_seconds = max(0, int((ends_at - timezone.now()).total_seconds()))
+    if remaining_seconds <= 0:
+        return None
+
+    return {
+        'active': True,
+        'duration_seconds': duration_seconds,
+        'remaining_seconds': remaining_seconds,
+        'started_at': latest_timeout.timestamp.isoformat(),
+        'ends_at': ends_at.isoformat(),
+    }
+# === NEW ADDITION END: realtime saved lineup rotation helpers ===
 
 
 def _get_timeouts(live):
@@ -230,7 +298,8 @@ def _get_action_label(action, players):
     if action.action_type == 'sideout':
         return f"Sideout won - {data.get('our_score', 0)}-{data.get('opponent_score', 0)}"
     if action.action_type == 'timeout':
-        return 'Coach timeout called'
+        duration = (action.data or {}).get('duration_seconds', TIMEOUT_DURATION_SECONDS)
+        return f'Coach timeout called ({duration}s timer)'
     if action.action_type == 'technical_timeout':
         return f"Technical timeout at {data.get('trigger_score')} points"
     if action.action_type == 'rotation':
@@ -295,6 +364,10 @@ def _build_context(live, team, players):
         'libero_player': live.libero_player,
         'tag_choices': ActionTag.TAG_CHOICES,
         'lineup_json': json.dumps(live.lineup or {}),
+        # === NEW ADDITION START: initial timeout countdown state for page load ===
+        'active_timeout_json': json.dumps(_timeout_status_payload(live) or {}),
+        'timeout_duration_seconds': TIMEOUT_DURATION_SECONDS,
+        # === NEW ADDITION END: initial timeout countdown state for page load ===
         'bench_json': json.dumps(live.bench or []),
     }
 
@@ -479,6 +552,9 @@ def record_point(request, match_id):
         'our_serve': live.our_serve,
         'current_rotation': live.current_rotation,
         'current_set': live.current_set,
+        # === NEW ADDITION START: preserve pre-point court positions for undo ===
+        'lineup': dict(live.lineup or {}),
+        # === NEW ADDITION END: preserve pre-point court positions for undo ===
     }
 
     if us:
@@ -486,6 +562,9 @@ def record_point(request, match_id):
         action_type = 'sideout' if mode == 'sideout' and not live.our_serve else 'point_won'
         if not live.our_serve:
             live.current_rotation = _rotation_after_sideout(live.current_rotation)
+            # === NEW ADDITION START: rotate and save on-court players in realtime ===
+            live.lineup = _rotate_lineup_positions(live.lineup, 'forward')
+            # === NEW ADDITION END: rotate and save on-court players in realtime ===
             live.our_serve = True
     else:
         set_score.opponent_score += 1
@@ -500,7 +579,14 @@ def record_point(request, match_id):
         action_type=action_type,
         set_number=live.current_set,
         rotation=live.current_rotation,
-        data={**before, 'our_score': set_score.our_score, 'opponent_score': set_score.opponent_score},
+        data={
+            **before,
+            'our_score': set_score.our_score,
+            'opponent_score': set_score.opponent_score,
+            # === NEW ADDITION START: save post-rotation court state for auditing ===
+            'lineup_after': dict(live.lineup or {}),
+            # === NEW ADDITION END: save post-rotation court state for auditing ===
+        },
     )
 
     trigger_score = max(set_score.our_score, set_score.opponent_score)
@@ -582,17 +668,29 @@ def manual_rotate(request, match_id):
     data = json.loads(request.body)
     direction = data.get('direction', 'forward')
     previous = live.current_rotation
+    # === NEW ADDITION START: save previous lineup and rotate players, not only the number ===
+    previous_lineup = dict(live.lineup or {})
     if direction == 'forward':
         live.current_rotation = _rotation_after_sideout(live.current_rotation)
+        live.lineup = _rotate_lineup_positions(live.lineup, 'forward')
     else:
         live.current_rotation = ((live.current_rotation - 2) % 6) + 1
+        live.lineup = _rotate_lineup_positions(live.lineup, 'back')
     live.save()
+    # === NEW ADDITION END: save previous lineup and rotate players, not only the number ===
     Action.objects.create(
         live_match=live,
         action_type='rotation',
         set_number=live.current_set,
         rotation=live.current_rotation,
-        data={'previous_rotation': previous, 'direction': direction},
+        data={
+            'previous_rotation': previous,
+            'direction': direction,
+            # === NEW ADDITION START: persist rotation state for undo/replay ===
+            'previous_lineup': previous_lineup,
+            'new_lineup': dict(live.lineup or {}),
+            # === NEW ADDITION END: persist rotation state for undo/replay ===
+        },
     )
     return JsonResponse(_state_payload(live, include_events=True))
 
@@ -662,13 +760,19 @@ def call_timeout(request, match_id):
     used, remaining = _get_timeouts(live)
     if remaining <= 0:
         return JsonResponse({'ok': False, 'error': 'No timeouts remaining.'}, status=400)
+    # === NEW ADDITION START: timeout countdown metadata saved with the timeout action ===
+    now = timezone.now()
     Action.objects.create(
         live_match=live,
         action_type='timeout',
         set_number=live.current_set,
         rotation=live.current_rotation,
-        data={},
+        data={
+            'duration_seconds': TIMEOUT_DURATION_SECONDS,
+            'started_at': now.isoformat(),
+        },
     )
+    # === NEW ADDITION END: timeout countdown metadata saved with the timeout action ===
     return JsonResponse(_state_payload(live, include_events=True))
 
 
@@ -695,6 +799,10 @@ def undo_last_action(request, match_id):
         live.our_serve = last.data.get('our_serve', live.our_serve)
         live.current_rotation = last.data.get('current_rotation', live.current_rotation)
         live.current_set = last.data.get('current_set', live.current_set)
+        # === NEW ADDITION START: restore saved court positions when undoing sideout rotation ===
+        if last.data.get('lineup'):
+            live.lineup = last.data.get('lineup')
+        # === NEW ADDITION END: restore saved court positions when undoing sideout rotation ===
         live.is_active = True
         live.ended_at = None
         live.save()
@@ -703,6 +811,10 @@ def undo_last_action(request, match_id):
             live.match.save(update_fields=['status'])
     elif last.action_type == 'rotation':
         live.current_rotation = last.data.get('previous_rotation', live.current_rotation)
+        # === NEW ADDITION START: undo player-position rotation state ===
+        if last.data.get('previous_lineup'):
+            live.lineup = last.data.get('previous_lineup')
+        # === NEW ADDITION END: undo player-position rotation state ===
         live.save()
     elif last.action_type == 'substitution':
         lineup = live.lineup or {}
@@ -847,6 +959,9 @@ def _state_payload(live, include_events=False, set_over=False, match_over=False)
         'substitution_limit': sub_limit,
         'timeouts_remaining': timeouts_remaining,
         'technical_timeouts': technical_timeouts,
+        # === NEW ADDITION START: timeout timer state for live UI refresh ===
+        'active_timeout': _timeout_status_payload(live, all_actions),
+        # === NEW ADDITION END: timeout timer state for live UI refresh ===
         'is_active': live.is_active,
         'lineup': live.lineup,
         'bench': live.bench,
