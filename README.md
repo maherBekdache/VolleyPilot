@@ -1,6 +1,6 @@
-# VolleyPilot — Sprint 1 Demo
+# VolleyPilot — Demo
 
-Volleyball team management app built with Django for CMPS 430.
+Volleyball team management app built with Django for EECE 430.
 
 ## Quick Start
 
